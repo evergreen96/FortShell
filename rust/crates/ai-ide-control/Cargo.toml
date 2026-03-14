@@ -1,0 +1,10 @@
+[package]
+name = "ai-ide-control"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+ai-ide-core = { path = "../ai-ide-core" }
+ai-ide-persistence = { path = "../ai-ide-persistence" }
+ai-ide-policy = { path = "../ai-ide-policy" }
+ai-ide-protocol = { path = "../ai-ide-protocol" }

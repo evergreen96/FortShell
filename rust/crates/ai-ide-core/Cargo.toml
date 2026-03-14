@@ -1,0 +1,8 @@
+[package]
+name = "ai-ide-core"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+ai-ide-protocol = { path = "../ai-ide-protocol" }
+sha2 = "0.10.9"

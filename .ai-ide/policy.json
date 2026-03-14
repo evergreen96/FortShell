@@ -1,0 +1,8 @@
+{
+  "deny_globs": [
+    ".gitignore",
+    ".pytest_cache/**",
+    ".pytest_cache/.gitignore"
+  ],
+  "version": 4
+}
