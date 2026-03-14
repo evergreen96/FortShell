@@ -1,0 +1,34 @@
+.ai_ide_runtime/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.venv/
+venv/
+rust/target/
+
+# OS-generated files
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100/
+.Trashes/
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Filtered filesystem prototypes / platform scratch
+prototypes/filtered_fs/**/__pycache__/
+prototypes/filtered_fs/**/.pytest_cache/
+prototypes/filtered_fs/**/.runtime/
+prototypes/filtered_fs/**/runtime/
+prototypes/filtered_fs/**/mounts/
+prototypes/filtered_fs/**/mnt/
+prototypes/filtered_fs/**/logs/
+prototypes/filtered_fs/**/tmp/
+prototypes/filtered_fs/**/cache/
+prototypes/filtered_fs/**/*.stdout.log
+prototypes/filtered_fs/**/*.stderr.log
+prototypes/filtered_fs/**/*.pid
