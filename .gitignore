@@ -6,7 +6,18 @@ __pycache__/
 .mypy_cache/
 .venv/
 venv/
+*.egg-info/
+dist/
+build/
 rust/target/
+
+# Desktop (Tauri/Node)
+desktop/node_modules/
+desktop/dist/
+desktop/src-tauri/target/
+
+# Worktrees
+.worktrees/
 
 # OS-generated files
 .DS_Store
