@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from ai_ide.events import EventBus
+from backend.events import EventBus
 
 
 class EventBusTests(unittest.TestCase):
@@ -125,7 +125,7 @@ class EventBusTests(unittest.TestCase):
             bus = EventBus(log_path=log_path)
             bus.publish("one", source_type="test", source_id="a")
 
-            with patch("ai_ide.events.RuntimeEvent.from_dict", side_effect=AssertionError("should not reload")):
+            with patch("backend.events.RuntimeEvent.from_dict", side_effect=AssertionError("should not reload")):
                 events = bus.list_events()
 
             self.assertEqual(["one"], [event.kind for event in events])

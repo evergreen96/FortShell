@@ -7,9 +7,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from ai_ide.platforms import WINDOWS_STRICT_HELPER_ENV, StrictSandboxProbe, get_platform_adapter
-from ai_ide.windows_strict_helper_resolution import WINDOWS_STRICT_HELPER_RUST_DEV
-from ai_ide.windows_strict_helper_protocol import STDIO_PROXY_FLAG
+from backend.windows.platforms import WINDOWS_STRICT_HELPER_ENV, StrictSandboxProbe, get_platform_adapter
+from backend.windows.windows_strict_helper_resolution import WINDOWS_STRICT_HELPER_RUST_DEV
+from backend.windows.windows_strict_helper_protocol import STDIO_PROXY_FLAG
 
 
 class PlatformAdapterTests(unittest.TestCase):
@@ -342,7 +342,7 @@ class PlatformAdapterTests(unittest.TestCase):
 
     def test_windows_strict_backend_invocation_supports_helper_command_prefix(self) -> None:
         adapter = get_platform_adapter("Windows")
-        helper_script = Path(__file__).resolve().parents[1] / "ai_ide" / "windows_restricted_host_helper_stub.py"
+        helper_script = Path(__file__).resolve().parents[1] / "backend" / "windows" / "windows_restricted_host_helper_stub.py"
         with tempfile.TemporaryDirectory() as temp_dir:
             projected_root = Path(temp_dir) / "projection"
             projected_root.mkdir()
@@ -376,7 +376,7 @@ class PlatformAdapterTests(unittest.TestCase):
             ):
                 with patch.dict("os.environ", {WINDOWS_STRICT_HELPER_ENV: WINDOWS_STRICT_HELPER_RUST_DEV}):
                     with patch(
-                        "ai_ide.windows_strict_helper_resolution.shutil.which",
+                        "backend.windows.windows_strict_helper_resolution.shutil.which",
                         side_effect=lambda name: "C:/Users/test/.cargo/bin/cargo.exe" if name == "cargo" else None,
                     ):
                         invocation = adapter.strict_backend_invocation("printf backend-ok", projected_root)
@@ -390,7 +390,7 @@ class PlatformAdapterTests(unittest.TestCase):
 
     def test_windows_strict_backend_invocation_uses_stdio_proxy_in_process_mode(self) -> None:
         adapter = get_platform_adapter("Windows")
-        helper_script = Path(__file__).resolve().parents[1] / "ai_ide" / "windows_restricted_host_helper_stub.py"
+        helper_script = Path(__file__).resolve().parents[1] / "backend" / "windows" / "windows_restricted_host_helper_stub.py"
         with tempfile.TemporaryDirectory() as temp_dir:
             projected_root = Path(temp_dir) / "projection"
             projected_root.mkdir()
@@ -429,7 +429,7 @@ class PlatformAdapterTests(unittest.TestCase):
 
             with patch("shutil.which", side_effect=lambda name: "/usr/bin/bwrap" if name == "bwrap" else None):
                 with patch(
-                    "ai_ide.platforms._existing_system_bind_paths",
+                    "backend.windows.platforms._existing_system_bind_paths",
                     return_value=["/usr", "/bin", "/lib64"],
                 ):
                     invocation = adapter.strict_backend_invocation("printf backend-ok", projected_root)
@@ -469,7 +469,7 @@ class PlatformAdapterTests(unittest.TestCase):
 
             with patch("shutil.which", side_effect=lambda name: "/usr/bin/bwrap" if name == "bwrap" else None):
                 with patch(
-                    "ai_ide.platforms._existing_system_bind_paths",
+                    "backend.windows.platforms._existing_system_bind_paths",
                     return_value=["/usr"],
                 ):
                     invocation = adapter.strict_backend_invocation(
@@ -492,7 +492,7 @@ class PlatformAdapterTests(unittest.TestCase):
 
             with patch("shutil.which", side_effect=lambda name: "/usr/bin/bwrap" if name == "bwrap" else None):
                 with patch(
-                    "ai_ide.platforms._existing_system_bind_paths",
+                    "backend.windows.platforms._existing_system_bind_paths",
                     return_value=["/usr"],
                 ):
                     invocation = adapter.strict_backend_invocation(

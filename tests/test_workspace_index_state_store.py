@@ -5,8 +5,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from ai_ide.workspace_index_state_store import WorkspaceIndexStateStore
-from ai_ide.workspace_models import WorkspaceIndexEntry, WorkspaceIndexSnapshot
+from backend.workspace_index_state_store import WorkspaceIndexStateStore
+from core.workspace_models import WorkspaceIndexEntry, WorkspaceIndexSnapshot
 
 
 class WorkspaceIndexStateStoreTests(unittest.TestCase):

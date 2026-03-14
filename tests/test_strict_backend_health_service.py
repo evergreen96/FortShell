@@ -4,9 +4,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from ai_ide.platforms import PlatformAdapter, StrictBackendInvocation, StrictSandboxProbe
-from ai_ide.strict_backend_health_service import StrictBackendHealthService
-from ai_ide.strict_backend_validator import StrictBackendValidator
+from backend.windows.platforms import PlatformAdapter, StrictBackendInvocation, StrictSandboxProbe
+from backend.strict_backend_health_service import StrictBackendHealthService
+from backend.strict_backend_validator import StrictBackendValidator
 
 
 class _FakeProjectionManager:

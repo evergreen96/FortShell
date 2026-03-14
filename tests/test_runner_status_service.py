@@ -3,10 +3,10 @@ from __future__ import annotations
 import json
 import unittest
 
-from ai_ide.platforms import PlatformAdapter, PlatformCapabilities, StrictSandboxProbe
-from ai_ide.runner_status_service import RunnerStatusService
-from ai_ide.strict_backend_health_service import StrictBackendHealth
-from ai_ide.strict_backend_validation_cache import StrictBackendValidationSnapshot
+from backend.windows.platforms import PlatformAdapter, PlatformCapabilities, StrictSandboxProbe
+from backend.runner_status_service import RunnerStatusService
+from backend.strict_backend_health_service import StrictBackendHealth
+from backend.strict_backend_validation_cache import StrictBackendValidationSnapshot
 
 
 class _FakePlatformAdapter(PlatformAdapter):

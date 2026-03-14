@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from ai_ide.command_access_service import CommandAccessService, CommandContext
+from backend.command_access_service import CommandAccessService, CommandContext
 
 
 class CommandAccessServiceTests(unittest.TestCase):

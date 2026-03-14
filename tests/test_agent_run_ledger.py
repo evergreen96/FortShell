@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import unittest
 
-from ai_ide.agents import AgentAdapter, AgentRegistry
-from ai_ide.agent_run_ledger import MAX_AGENT_RUN_HISTORY, AgentRunLedger
-from ai_ide.models import AgentRunRecord
-from ai_ide.runner import RunnerResult
+from backend.agents import AgentAdapter, AgentRegistry
+from backend.agent_run_ledger import MAX_AGENT_RUN_HISTORY, AgentRunLedger
+from core.models import AgentRunRecord
+from backend.runner import RunnerResult
 
 
 class AgentRunLedgerTests(unittest.TestCase):

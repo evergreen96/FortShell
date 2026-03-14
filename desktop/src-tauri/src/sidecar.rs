@@ -40,7 +40,7 @@ impl SidecarManager {
     ) -> Result<Self, String> {
         let mut args = vec![
             "-m".to_string(),
-            "ai_ide.desktop_sidecar".to_string(),
+            "backend.desktop_sidecar".to_string(),
             "--project-root".to_string(),
             project_root.to_string(),
         ];

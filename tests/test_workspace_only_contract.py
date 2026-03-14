@@ -12,11 +12,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from ai_ide.app import AIIdeApp
-from ai_ide.internal import INTERNAL_PROJECT_METADATA_DIR_NAME
-from ai_ide.policy import PolicyEngine
-from ai_ide.workspace_access_service import WorkspaceAccessService
-from ai_ide.workspace_panel_service import WorkspacePanelService
+from backend.app import AIIdeApp
+from core.internal import INTERNAL_PROJECT_METADATA_DIR_NAME
+from core.policy import PolicyEngine
+from core.workspace_access_service import WorkspaceAccessService
+from backend.workspace_panel_service import WorkspacePanelService
 
 
 class WorkspaceOnlyContractTests(unittest.TestCase):

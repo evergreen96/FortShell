@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from ai_ide.agent_transport_provider import PipeOnlyTransportProvider
+from backend.agent_transport_provider import PipeOnlyTransportProvider
 
 
 class PipeOnlyTransportProviderTests(unittest.TestCase):

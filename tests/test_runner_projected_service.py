@@ -4,8 +4,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from ai_ide.runner import RunnerResult
-from ai_ide.runner_projected_service import RunnerProjectedService
+from backend.runner import RunnerResult
+from backend.runner_projected_service import RunnerProjectedService
 
 
 class _FakeDecision:

@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from ai_ide.windows_strict_helper_protocol import (
+from backend.windows.windows_strict_helper_protocol import (
     CONTROL_FILE_FLAG,
     HELPER_STATUS_STATES,
     HELPER_HOST_PATH_SCHEME,

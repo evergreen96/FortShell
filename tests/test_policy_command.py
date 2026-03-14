@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from ai_ide.app import AIIdeApp
+from backend.app import AIIdeApp
 
 
 class PolicyCommandTests(unittest.TestCase):

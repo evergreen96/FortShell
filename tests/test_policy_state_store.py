@@ -5,8 +5,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from ai_ide.models import PolicyState
-from ai_ide.policy_state_store import PolicyStateStore
+from core.models import PolicyState
+from core.policy_state_store import PolicyStateStore
 
 
 class PolicyStateStoreTests(unittest.TestCase):

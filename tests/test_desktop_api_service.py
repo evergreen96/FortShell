@@ -5,7 +5,7 @@ from __future__ import annotations
 import unittest
 from unittest.mock import MagicMock
 
-from ai_ide.desktop_api_service import DesktopApiService
+from backend.desktop_api_service import DesktopApiService
 
 
 class TestDesktopApiService(unittest.TestCase):

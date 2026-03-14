@@ -4,10 +4,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from ai_ide.models import WriteProposal
-from ai_ide.policy import PolicyEngine
-from ai_ide.review_manager import MAX_REVIEW_FILE_BYTES, MAX_REVIEW_PROPOSAL_HISTORY, ReviewManager
-from ai_ide.review_state_store import ReviewStateStore
+from core.models import WriteProposal
+from core.policy import PolicyEngine
+from backend.review_manager import MAX_REVIEW_FILE_BYTES, MAX_REVIEW_PROPOSAL_HISTORY, ReviewManager
+from backend.review_state_store import ReviewStateStore
 
 
 class ReviewManagerTests(unittest.TestCase):

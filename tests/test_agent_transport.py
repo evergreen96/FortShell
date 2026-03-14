@@ -4,15 +4,15 @@ import sys
 import unittest
 from unittest.mock import patch
 
-from ai_ide.agents import AgentAdapter, AgentRegistry
-from ai_ide.agent_transport import AgentTransportPlanner
+from backend.agents import AgentAdapter, AgentRegistry
+from backend.agent_transport import AgentTransportPlanner
 
 
 class AgentTransportPlannerTests(unittest.TestCase):
     def test_describe_marks_pty_preferred_adapter_as_degraded_pipe(self) -> None:
         planner = AgentTransportPlanner(AgentRegistry([AgentAdapter("codex", "Codex CLI", ("codex",))]))
 
-        with patch("ai_ide.agents.shutil.which", return_value=sys.executable):
+        with patch("backend.agents.shutil.which", return_value=sys.executable):
             plan = planner.describe("codex", "strict")
 
         self.assertTrue(plan.adapter_available)
@@ -28,7 +28,7 @@ class AgentTransportPlannerTests(unittest.TestCase):
             AgentRegistry([AgentAdapter("pty-only", "PTY Only", ("pty-only",), io_mode_preference="pty_required")])
         )
 
-        with patch("ai_ide.agents.shutil.which", return_value=sys.executable):
+        with patch("backend.agents.shutil.which", return_value=sys.executable):
             plan = planner.describe("pty-only", "projected")
 
         self.assertEqual("pty_required", plan.requested_io_mode)

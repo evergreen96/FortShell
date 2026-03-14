@@ -5,8 +5,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from ai_ide.app import AIIdeApp
-from ai_ide.internal import INTERNAL_PROJECT_METADATA_DIR_NAME
+from backend.app import AIIdeApp
+from core.internal import INTERNAL_PROJECT_METADATA_DIR_NAME
 
 
 class WorkspaceCommandTests(unittest.TestCase):

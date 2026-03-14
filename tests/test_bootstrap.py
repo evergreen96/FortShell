@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from ai_ide.bootstrap import (
+from backend.bootstrap import (
     RUST_HOST_BIN_ENV,
     RUST_HOST_DEFAULT_AGENT_KIND_ENV,
     RUST_HOST_ENABLE_ENV,
@@ -17,7 +17,7 @@ from ai_ide.bootstrap import (
     resolve_rust_host_settings,
     resolve_runtime_root,
 )
-from ai_ide.internal import INTERNAL_PROJECT_METADATA_DIR_NAME, INTERNAL_POLICY_STATE_FILENAME
+from core.internal import INTERNAL_PROJECT_METADATA_DIR_NAME, INTERNAL_POLICY_STATE_FILENAME
 
 
 class BootstrapTests(unittest.TestCase):

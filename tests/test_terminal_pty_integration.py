@@ -8,8 +8,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from ai_ide.models import TerminalSession, UsageMetrics
-from ai_ide.terminal import TerminalManager
+from core.models import TerminalSession, UsageMetrics
+from backend.terminal import TerminalManager
 
 
 class FakeRunnerManager:
@@ -17,7 +17,7 @@ class FakeRunnerManager:
         self.calls: list[tuple] = []
 
     def run_in_mode(self, mode, command, execution_session_id=None):
-        from ai_ide.runner import RunnerResult
+        from backend.runner import RunnerResult
 
         self.calls.append((mode, command, execution_session_id))
         return RunnerResult(
@@ -58,7 +58,7 @@ class TestTerminalManagerIoMode(unittest.TestCase):
         with self.assertRaises(ValueError):
             mgr.create_terminal(name="test", transport="host", io_mode="invalid")
 
-    @patch("ai_ide.terminal.pty_available", return_value=False)
+    @patch("backend.terminal.pty_available", return_value=False)
     def test_create_pty_terminal_fallback_when_unavailable(self, mock_avail: MagicMock) -> None:
         mgr = self._make_manager()
         session = mgr.create_terminal(name="test", transport="host", io_mode="pty")
@@ -136,7 +136,7 @@ class TestTerminalStateStoreIoMode(unittest.TestCase):
 
     def test_missing_io_mode_defaults_to_command(self) -> None:
         """Legacy state files without io_mode should default to 'command'."""
-        from ai_ide.terminal_state_store import TerminalStateStore
+        from backend.terminal_state_store import TerminalStateStore
 
         tmpdir = tempfile.mkdtemp()
         state_path = Path(tmpdir) / "state.json"

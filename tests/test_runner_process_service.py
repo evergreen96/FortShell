@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from ai_ide.runner_process_service import RunnerProcessService
+from backend.runner_process_service import RunnerProcessService
 
 
 class RunnerProcessServiceTests(unittest.TestCase):

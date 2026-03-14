@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import unittest
 
-from ai_ide.agent_event_publisher import AgentRuntimeEventPublisher
-from ai_ide.events import EventBus
-from ai_ide.models import AgentRunRecord
+from backend.agent_event_publisher import AgentRuntimeEventPublisher
+from backend.events import EventBus
+from core.models import AgentRunRecord
 
 
 class AgentRuntimeEventPublisherTests(unittest.TestCase):

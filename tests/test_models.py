@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from ai_ide.models import (
+from core.models import (
     MAX_AGENT_RUN_STREAM_BYTES,
     MAX_TERMINAL_COMMAND_HISTORY,
     MAX_TERMINAL_INBOX_ENTRIES,
@@ -11,7 +11,7 @@ from ai_ide.models import (
     TerminalEventWatch,
     TerminalSession,
 )
-from ai_ide.terminal_inbox import TerminalInboxEntry
+from backend.terminal_inbox import TerminalInboxEntry
 
 
 class AgentRunRecordModelTests(unittest.TestCase):

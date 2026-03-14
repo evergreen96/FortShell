@@ -5,9 +5,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from ai_ide.models import TerminalSession, UsageMetrics
-from ai_ide.runner import RunnerResult
-from ai_ide.terminal_command_executor import TerminalCommandExecutor
+from core.models import TerminalSession, UsageMetrics
+from backend.runner import RunnerResult
+from backend.terminal_command_executor import TerminalCommandExecutor
 
 
 class _FakeRunnerManager:
@@ -159,7 +159,7 @@ class TerminalCommandExecutorTests(unittest.TestCase):
             )
 
             fake_result = Mock(returncode=0, stdout="ok\n", stderr="")
-            with patch("ai_ide.terminal_command_executor.subprocess.run", return_value=fake_result) as mocked_run:
+            with patch("backend.terminal_command_executor.subprocess.run", return_value=fake_result) as mocked_run:
                 output = executor.execute(session, "echo hello")
 
         argv = mocked_run.call_args.args[0]

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import unittest
 
-from ai_ide.desktop_sidecar_protocol import (
+from backend.desktop_sidecar_protocol import (
     SidecarEvent,
     SidecarRequest,
     SidecarResponse,

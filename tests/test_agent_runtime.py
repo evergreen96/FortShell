@@ -8,16 +8,16 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from ai_ide.agent_runtime import AgentRuntimeManager
-from ai_ide.agents import AgentAdapter, AgentRegistry
-from ai_ide.events import EventBus
-from ai_ide.platforms import get_platform_adapter
-from ai_ide.policy import PolicyEngine
-from ai_ide.projection import ProjectedWorkspaceManager
-from ai_ide.runner import RunnerManager
-from ai_ide.session import SessionManager
-from ai_ide.models import AgentRunWatch
-from ai_ide.windows_strict_helper_resolution import WINDOWS_STRICT_HELPER_RUST_DEV
+from backend.agent_runtime import AgentRuntimeManager
+from backend.agents import AgentAdapter, AgentRegistry
+from backend.events import EventBus
+from backend.windows.platforms import get_platform_adapter
+from core.policy import PolicyEngine
+from backend.projection import ProjectedWorkspaceManager
+from backend.runner import RunnerManager
+from backend.session import SessionManager
+from core.models import AgentRunWatch
+from backend.windows.windows_strict_helper_resolution import WINDOWS_STRICT_HELPER_RUST_DEV
 
 
 class AgentRuntimeManagerTests(unittest.TestCase):
@@ -42,7 +42,7 @@ class AgentRuntimeManagerTests(unittest.TestCase):
 
     def test_execute_current_marks_unavailable_when_adapter_launcher_is_missing(self) -> None:
         self.sessions.rotate_agent_session("codex")
-        with patch("ai_ide.agents.shutil.which", return_value=None):
+        with patch("backend.agents.shutil.which", return_value=None):
             execution = self.runtime.execute_current()
 
         self.assertEqual("unavailable", execution.record.status)
@@ -52,7 +52,7 @@ class AgentRuntimeManagerTests(unittest.TestCase):
     def test_execute_current_passes_session_metadata_to_runner(self) -> None:
         self.sessions.rotate_agent_session("codex")
 
-        with patch("ai_ide.agents.shutil.which", return_value="/tmp/codex"):
+        with patch("backend.agents.shutil.which", return_value="/tmp/codex"):
             with patch.object(self.runners, "run_process_in_mode") as run_process:
                 run_process.return_value = type(
                     "RunnerResult",
@@ -89,7 +89,7 @@ class AgentRuntimeManagerTests(unittest.TestCase):
         runtime = AgentRuntimeManager(registry, self.runners, self.sessions, event_bus=self.events)
         self.sessions.rotate_agent_session("pty-only")
 
-        with patch("ai_ide.agents.shutil.which", return_value=sys.executable):
+        with patch("backend.agents.shutil.which", return_value=sys.executable):
             execution = runtime.execute_current(["--version"])
 
         self.assertEqual("unavailable", execution.record.status)
@@ -100,7 +100,7 @@ class AgentRuntimeManagerTests(unittest.TestCase):
     def test_describe_transport_reports_runtime_fallback_for_pty_preferred_adapter(self) -> None:
         self.sessions.rotate_agent_session("codex")
 
-        with patch("ai_ide.agents.shutil.which", return_value=sys.executable):
+        with patch("backend.agents.shutil.which", return_value=sys.executable):
             transport = self.runtime.describe_transport("codex", mode="strict")
 
         self.assertEqual("codex", transport.agent_kind)
@@ -114,7 +114,7 @@ class AgentRuntimeManagerTests(unittest.TestCase):
     def test_start_current_and_poll_complete_streaming_run(self) -> None:
         self.sessions.rotate_agent_session("codex")
 
-        with patch("ai_ide.agents.shutil.which", return_value=sys.executable):
+        with patch("backend.agents.shutil.which", return_value=sys.executable):
             record = self.runtime.start_current(
                 [
                     "-u",
@@ -147,7 +147,7 @@ class AgentRuntimeManagerTests(unittest.TestCase):
     def test_stop_run_marks_streaming_record_stopped(self) -> None:
         self.sessions.rotate_agent_session("codex")
 
-        with patch("ai_ide.agents.shutil.which", return_value=sys.executable):
+        with patch("backend.agents.shutil.which", return_value=sys.executable):
             record = self.runtime.start_current(
                 [
                     "-u",
@@ -164,7 +164,7 @@ class AgentRuntimeManagerTests(unittest.TestCase):
     def test_send_input_delivers_text_to_active_process(self) -> None:
         self.sessions.rotate_agent_session("codex")
 
-        with patch("ai_ide.agents.shutil.which", return_value=sys.executable):
+        with patch("backend.agents.shutil.which", return_value=sys.executable):
             record = self.runtime.start_current(
                 [
                     "-u",
@@ -183,11 +183,11 @@ class AgentRuntimeManagerTests(unittest.TestCase):
 
     def test_start_current_in_strict_mode_can_stream_through_windows_helper_stub(self) -> None:
         self.sessions.rotate_agent_session("codex")
-        helper_script = Path(__file__).resolve().parents[1] / "ai_ide" / "windows_restricted_host_helper_stub.py"
+        helper_script = Path(__file__).resolve().parents[1] / "backend" / "windows" / "windows_restricted_host_helper_stub.py"
         helper_command = f"{sys.executable} {helper_script}"
 
         with patch.dict("os.environ", {"AI_IDE_WINDOWS_STRICT_HELPER": helper_command}):
-            with patch("ai_ide.agents.shutil.which", return_value=sys.executable):
+            with patch("backend.agents.shutil.which", return_value=sys.executable):
                 record = self.runtime.start_current(
                     [
                         "-u",
@@ -227,7 +227,7 @@ class AgentRuntimeManagerTests(unittest.TestCase):
 
         with patch.dict("os.environ", {"AI_IDE_WINDOWS_STRICT_HELPER": WINDOWS_STRICT_HELPER_RUST_DEV}):
             with patch(
-                "ai_ide.agents.shutil.which",
+                "backend.agents.shutil.which",
                 side_effect=lambda name: sys.executable if name == "codex" else real_which(name),
             ):
                 execution = self.runtime.execute_current(
@@ -244,11 +244,11 @@ class AgentRuntimeManagerTests(unittest.TestCase):
 
     def test_stop_run_in_strict_mode_closes_helper_stdin_before_forceful_terminate(self) -> None:
         self.sessions.rotate_agent_session("codex")
-        helper_script = Path(__file__).resolve().parents[1] / "ai_ide" / "windows_restricted_host_helper_stub.py"
+        helper_script = Path(__file__).resolve().parents[1] / "backend" / "windows" / "windows_restricted_host_helper_stub.py"
         helper_command = f"{sys.executable} {helper_script}"
 
         with patch.dict("os.environ", {"AI_IDE_WINDOWS_STRICT_HELPER": helper_command}):
-            with patch("ai_ide.agents.shutil.which", return_value=sys.executable):
+            with patch("backend.agents.shutil.which", return_value=sys.executable):
                 record = self.runtime.start_current(
                     [
                         "-u",
@@ -272,11 +272,11 @@ class AgentRuntimeManagerTests(unittest.TestCase):
 
     def test_inspect_run_uses_helper_status_channel_for_active_strict_helper_run(self) -> None:
         self.sessions.rotate_agent_session("codex")
-        helper_script = Path(__file__).resolve().parents[1] / "ai_ide" / "windows_restricted_host_helper_stub.py"
+        helper_script = Path(__file__).resolve().parents[1] / "backend" / "windows" / "windows_restricted_host_helper_stub.py"
         helper_command = f"{sys.executable} {helper_script}"
 
         with patch.dict("os.environ", {"AI_IDE_WINDOWS_STRICT_HELPER": helper_command}):
-            with patch("ai_ide.agents.shutil.which", return_value=sys.executable):
+            with patch("backend.agents.shutil.which", return_value=sys.executable):
                 record = self.runtime.start_current(
                     [
                         "-u",
@@ -300,11 +300,11 @@ class AgentRuntimeManagerTests(unittest.TestCase):
 
     def test_list_run_inspections_uses_helper_status_for_active_strict_helper_run(self) -> None:
         self.sessions.rotate_agent_session("codex")
-        helper_script = Path(__file__).resolve().parents[1] / "ai_ide" / "windows_restricted_host_helper_stub.py"
+        helper_script = Path(__file__).resolve().parents[1] / "backend" / "windows" / "windows_restricted_host_helper_stub.py"
         helper_command = f"{sys.executable} {helper_script}"
 
         with patch.dict("os.environ", {"AI_IDE_WINDOWS_STRICT_HELPER": helper_command}):
-            with patch("ai_ide.agents.shutil.which", return_value=sys.executable):
+            with patch("backend.agents.shutil.which", return_value=sys.executable):
                 record = self.runtime.start_current(
                     [
                         "-u",
@@ -329,7 +329,7 @@ class AgentRuntimeManagerTests(unittest.TestCase):
         self.sessions.rotate_agent_session("codex")
         execution_session_id = self.sessions.current_session_id
 
-        with patch("ai_ide.agents.shutil.which", return_value=sys.executable):
+        with patch("backend.agents.shutil.which", return_value=sys.executable):
             record = self.runtime.start_current(
                 [
                     "-u",
@@ -347,7 +347,7 @@ class AgentRuntimeManagerTests(unittest.TestCase):
     def test_watch_run_pulls_unseen_events_with_persisted_cursor(self) -> None:
         self.sessions.rotate_agent_session("codex")
 
-        with patch("ai_ide.agents.shutil.which", return_value=sys.executable):
+        with patch("backend.agents.shutil.which", return_value=sys.executable):
             record = self.runtime.start_current(
                 [
                     "-u",
@@ -371,7 +371,7 @@ class AgentRuntimeManagerTests(unittest.TestCase):
     def test_pull_watch_refreshes_active_run_without_explicit_poll(self) -> None:
         self.sessions.rotate_agent_session("codex")
 
-        with patch("ai_ide.agents.shutil.which", return_value=sys.executable):
+        with patch("backend.agents.shutil.which", return_value=sys.executable):
             record = self.runtime.start_current(
                 [
                     "-u",
@@ -392,7 +392,7 @@ class AgentRuntimeManagerTests(unittest.TestCase):
     def test_watch_run_can_replay_existing_events(self) -> None:
         self.sessions.rotate_agent_session("codex")
 
-        with patch("ai_ide.agents.shutil.which", return_value=sys.executable):
+        with patch("backend.agents.shutil.which", return_value=sys.executable):
             execution = self.runtime.execute_current(
                 ["-c", "print('replay-agent')"]
             )
@@ -413,7 +413,7 @@ class AgentRuntimeManagerTests(unittest.TestCase):
             state_path=state_path,
         )
 
-        with patch("ai_ide.agents.shutil.which", return_value=sys.executable):
+        with patch("backend.agents.shutil.which", return_value=sys.executable):
             execution = runtime.execute_current(["-c", "print('persist-watch')"])
 
         watch = runtime.watch_run(execution.record.run_id, replay=True)
@@ -440,7 +440,7 @@ class AgentRuntimeManagerTests(unittest.TestCase):
             state_path=state_path,
         )
 
-        with patch("ai_ide.agents.shutil.which", return_value=sys.executable):
+        with patch("backend.agents.shutil.which", return_value=sys.executable):
             execution = runtime.execute_current(["-c", "print('persist-watch')"])
 
         watch = runtime.watch_run(execution.record.run_id, replay=True)
@@ -478,7 +478,7 @@ class AgentRuntimeManagerTests(unittest.TestCase):
             state_path=state_path,
         )
 
-        with patch("ai_ide.agents.shutil.which", return_value=sys.executable):
+        with patch("backend.agents.shutil.which", return_value=sys.executable):
             execution = runtime.execute_current(["-c", "print('persisted-history')"])
 
         reloaded_runtime = AgentRuntimeManager(
@@ -504,7 +504,7 @@ class AgentRuntimeManagerTests(unittest.TestCase):
             state_path=state_path,
         )
 
-        with patch("ai_ide.agents.shutil.which", return_value=sys.executable):
+        with patch("backend.agents.shutil.which", return_value=sys.executable):
             record = runtime.start_current(
                 [
                     "-u",
@@ -529,7 +529,7 @@ class AgentRuntimeManagerTests(unittest.TestCase):
     def test_cleanup_stale_watches_removes_old_watch_definition_and_cursor(self) -> None:
         self.sessions.rotate_agent_session("codex")
 
-        with patch("ai_ide.agents.shutil.which", return_value=sys.executable):
+        with patch("backend.agents.shutil.which", return_value=sys.executable):
             execution = self.runtime.execute_current(["-c", "print('cleanup-watch')"])
 
         watch = self.runtime.watch_run(execution.record.run_id, name="stale-watch")

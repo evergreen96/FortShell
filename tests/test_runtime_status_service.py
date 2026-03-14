@@ -3,8 +3,8 @@ from __future__ import annotations
 import json
 import unittest
 
-from ai_ide.models import UsageMetrics
-from ai_ide.runtime_status_service import RuntimeStatusService
+from core.models import UsageMetrics
+from backend.runtime_status_service import RuntimeStatusService
 
 
 class RuntimeStatusServiceTests(unittest.TestCase):

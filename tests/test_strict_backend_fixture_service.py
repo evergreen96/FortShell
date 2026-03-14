@@ -4,9 +4,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from ai_ide.runner_models import RunnerResult
-from ai_ide.strict_backend_fixture_service import StrictBackendFixtureService
-from ai_ide.strict_backend_health_service import StrictBackendHealth
+from backend.runner_models import RunnerResult
+from backend.strict_backend_fixture_service import StrictBackendFixtureService
+from backend.strict_backend_health_service import StrictBackendHealth
 
 
 class _FakeProjectionManager:

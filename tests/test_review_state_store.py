@@ -5,8 +5,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from ai_ide.models import WriteProposal
-from ai_ide.review_state_store import ReviewStateStore
+from core.models import WriteProposal
+from backend.review_state_store import ReviewStateStore
 
 
 class ReviewStateStoreTests(unittest.TestCase):

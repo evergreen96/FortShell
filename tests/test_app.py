@@ -9,20 +9,20 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from ai_ide.app import AIIdeApp
-from ai_ide.broker import MAX_AUDIT_ENTRIES, MAX_READ_FILE_BYTES
-from ai_ide.command_access_service import CommandContext
-from ai_ide.events import EventBus
-from ai_ide.internal import INTERNAL_PROJECT_METADATA_DIR_NAME, INTERNAL_POLICY_STATE_FILENAME
-from ai_ide.models import (
+from backend.app import AIIdeApp
+from backend.broker import MAX_AUDIT_ENTRIES, MAX_READ_FILE_BYTES
+from backend.command_access_service import CommandContext
+from backend.events import EventBus
+from core.internal import INTERNAL_PROJECT_METADATA_DIR_NAME, INTERNAL_POLICY_STATE_FILENAME
+from core.models import (
     AuditEvent,
     WriteProposal,
 )
-from ai_ide.runner_models import RunnerResult
-from ai_ide.terminal_inbox import TerminalInboxEntry
-from ai_ide.terminal_watch_manager import TerminalEventWatch
-from ai_ide.windows_strict_helper_resolution import WINDOWS_STRICT_HELPER_RUST_DEV
-from ai_ide.workspace_visibility_watcher import QueueSignalWorkspaceVisibilityWatcher
+from backend.runner_models import RunnerResult
+from backend.terminal_inbox import TerminalInboxEntry
+from backend.terminal_watch_manager import TerminalEventWatch
+from backend.windows.windows_strict_helper_resolution import WINDOWS_STRICT_HELPER_RUST_DEV
+from backend.workspace_visibility_watcher import QueueSignalWorkspaceVisibilityWatcher
 
 
 _RUST_DEV_HELPER_READ_BOUNDARY_CACHE: dict[Path, bool] = {}
@@ -1153,7 +1153,7 @@ class AIIdeAppTests(unittest.TestCase):
             (root / "safe" / "todo.txt").write_text("visible plan", encoding="utf-8")
 
             app = AIIdeApp(root, runtime_root=runtime_root)
-            with patch("ai_ide.agents.shutil.which", return_value="/tmp/codex"):
+            with patch("backend.agents.shutil.which", return_value="/tmp/codex"):
                 result = app.handle_command("agent plan codex")
 
             self.assertIn("agent_kind=codex", result)
@@ -1176,7 +1176,7 @@ class AIIdeAppTests(unittest.TestCase):
             (root / "safe" / "todo.txt").write_text("visible plan", encoding="utf-8")
 
             app = AIIdeApp(root, runtime_root=runtime_root)
-            with patch("ai_ide.agents.shutil.which", return_value="/tmp/codex"):
+            with patch("backend.agents.shutil.which", return_value="/tmp/codex"):
                 result = app.handle_command("agent transport codex --mode strict")
 
             self.assertIn("agent_kind=codex", result)
@@ -1214,7 +1214,7 @@ class AIIdeAppTests(unittest.TestCase):
 
             app = AIIdeApp(root, runtime_root=runtime_root)
             app.handle_command("agent rotate codex")
-            with patch("ai_ide.agents.shutil.which", return_value=sys.executable):
+            with patch("backend.agents.shutil.which", return_value=sys.executable):
                 result = app.handle_command('agent exec -- -c "print(\'agent-ok\')"')
 
             self.assertIn("kind=codex", result)
@@ -1235,7 +1235,7 @@ class AIIdeAppTests(unittest.TestCase):
 
             app = AIIdeApp(root, runtime_root=runtime_root)
             app.handle_command("agent rotate codex")
-            with patch("ai_ide.agents.shutil.which", return_value=sys.executable):
+            with patch("backend.agents.shutil.which", return_value=sys.executable):
                 app.handle_command('agent exec -- -c "print(\'agent-history\')"')
             result = app.handle_command("agent history")
 
@@ -1254,7 +1254,7 @@ class AIIdeAppTests(unittest.TestCase):
 
             app = AIIdeApp(root, runtime_root=runtime_root)
             app.handle_command("agent rotate codex")
-            with patch("ai_ide.agents.shutil.which", return_value=sys.executable):
+            with patch("backend.agents.shutil.which", return_value=sys.executable):
                 show_payload = json.loads(app.handle_command("agent show json"))
                 list_payload = json.loads(app.handle_command("agent list json"))
                 registry_payload = json.loads(app.handle_command("agent registry json"))
@@ -1282,7 +1282,7 @@ class AIIdeAppTests(unittest.TestCase):
 
             app = AIIdeApp(root, runtime_root=runtime_root)
             app.handle_command("agent rotate codex")
-            with patch("ai_ide.agents.shutil.which", return_value=sys.executable):
+            with patch("backend.agents.shutil.which", return_value=sys.executable):
                 started = app.handle_command(
                     'agent start -- -u -c "import time; print(\'stream-app\', flush=True); time.sleep(5)"'
                 )
@@ -1306,7 +1306,7 @@ class AIIdeAppTests(unittest.TestCase):
 
             app = AIIdeApp(root, runtime_root=runtime_root)
             app.handle_command("agent rotate codex")
-            with patch("ai_ide.agents.shutil.which", return_value=sys.executable):
+            with patch("backend.agents.shutil.which", return_value=sys.executable):
                 started = app.handle_command(
                     'agent start -- -u -c "import time; print(\'agent-json\', flush=True); time.sleep(5)"'
                 )
@@ -1339,11 +1339,11 @@ class AIIdeAppTests(unittest.TestCase):
 
             app = AIIdeApp(root, runtime_root=runtime_root)
             app.handle_command("agent rotate codex")
-            helper_script = Path(__file__).resolve().parents[1] / "ai_ide" / "windows_restricted_host_helper_stub.py"
+            helper_script = Path(__file__).resolve().parents[1] / "backend" / "windows" / "windows_restricted_host_helper_stub.py"
             helper_command = f"{sys.executable} {helper_script}"
 
             with patch.dict("os.environ", {"AI_IDE_WINDOWS_STRICT_HELPER": helper_command}):
-                with patch("ai_ide.agents.shutil.which", return_value=sys.executable):
+                with patch("backend.agents.shutil.which", return_value=sys.executable):
                     started = app.handle_command(
                         'agent start --mode strict -- -u -c "import time; print(\'helper-poll\', flush=True); time.sleep(5)"'
                     )
@@ -1367,11 +1367,11 @@ class AIIdeAppTests(unittest.TestCase):
 
             app = AIIdeApp(root, runtime_root=runtime_root)
             app.handle_command("agent rotate codex")
-            helper_script = Path(__file__).resolve().parents[1] / "ai_ide" / "windows_restricted_host_helper_stub.py"
+            helper_script = Path(__file__).resolve().parents[1] / "backend" / "windows" / "windows_restricted_host_helper_stub.py"
             helper_command = f"{sys.executable} {helper_script}"
 
             with patch.dict("os.environ", {"AI_IDE_WINDOWS_STRICT_HELPER": helper_command}):
-                with patch("ai_ide.agents.shutil.which", return_value=sys.executable):
+                with patch("backend.agents.shutil.which", return_value=sys.executable):
                     started = app.handle_command(
                         'agent start --mode strict -- -u -c "import time; print(\'helper-history\', flush=True); time.sleep(5)"'
                     )
@@ -1401,7 +1401,7 @@ class AIIdeAppTests(unittest.TestCase):
 
             with patch.dict("os.environ", {"AI_IDE_WINDOWS_STRICT_HELPER": WINDOWS_STRICT_HELPER_RUST_DEV}):
                 with patch(
-                    "ai_ide.agents.shutil.which",
+                    "backend.agents.shutil.which",
                     side_effect=lambda name: sys.executable if name == "codex" else real_which(name),
                 ):
                     result = app.handle_command(
@@ -1423,7 +1423,7 @@ class AIIdeAppTests(unittest.TestCase):
 
             app = AIIdeApp(root, runtime_root=runtime_root)
             app.handle_command("agent rotate codex")
-            with patch("ai_ide.agents.shutil.which", return_value=sys.executable):
+            with patch("backend.agents.shutil.which", return_value=sys.executable):
                 started = app.handle_command(
                     'agent start -- -u -c "import time; print(\'watch-app\', flush=True); time.sleep(0.2); print(\'watch-done\', flush=True)"'
                 )
@@ -1439,7 +1439,7 @@ class AIIdeAppTests(unittest.TestCase):
             self.assertIn("watch-done", inbox)
 
     def test_agent_watch_rejects_when_watch_limit_is_exceeded(self) -> None:
-        from ai_ide.agent_watch_manager import MAX_AGENT_RUN_WATCHES
+        from backend.agent_watch_manager import MAX_AGENT_RUN_WATCHES
 
         with tempfile.TemporaryDirectory() as temp_dir:
             base = Path(temp_dir)
@@ -1451,7 +1451,7 @@ class AIIdeAppTests(unittest.TestCase):
 
             app = AIIdeApp(root, runtime_root=runtime_root)
             app.handle_command("agent rotate codex")
-            with patch("ai_ide.agents.shutil.which", return_value=sys.executable):
+            with patch("backend.agents.shutil.which", return_value=sys.executable):
                 started = app.handle_command('agent start -- -u -c "import time; print(\'watch-limit\', flush=True); time.sleep(5)"')
                 run_id = started.split()[0].split("=", 1)[1]
                 for index in range(MAX_AGENT_RUN_WATCHES):
@@ -1473,7 +1473,7 @@ class AIIdeAppTests(unittest.TestCase):
 
             first_app = AIIdeApp(root, runtime_root=runtime_root)
             first_app.handle_command("agent rotate codex")
-            with patch("ai_ide.agents.shutil.which", return_value=sys.executable):
+            with patch("backend.agents.shutil.which", return_value=sys.executable):
                 started = first_app.handle_command('agent start -- -u -c "print(\'restore-watch\', flush=True)"')
                 run_id = started.split()[0].split("=", 1)[1]
                 time.sleep(0.1)
@@ -1502,7 +1502,7 @@ class AIIdeAppTests(unittest.TestCase):
 
             first_app = AIIdeApp(root, runtime_root=runtime_root)
             first_app.handle_command("agent rotate codex")
-            with patch("ai_ide.agents.shutil.which", return_value=sys.executable):
+            with patch("backend.agents.shutil.which", return_value=sys.executable):
                 first_app.handle_command('agent exec -- -c "print(\'restore-history\')"')
             run_id = first_app.agent_runtime.list_runs()[0].run_id
 
@@ -1523,7 +1523,7 @@ class AIIdeAppTests(unittest.TestCase):
 
             first_app = AIIdeApp(root, runtime_root=runtime_root)
             first_app.handle_command("agent rotate codex")
-            with patch("ai_ide.agents.shutil.which", return_value=sys.executable):
+            with patch("backend.agents.shutil.which", return_value=sys.executable):
                 started = first_app.handle_command(
                     'agent start -- -u -c "import time; print(\'restore-interrupted\', flush=True); time.sleep(5)"'
                 )
@@ -1547,7 +1547,7 @@ class AIIdeAppTests(unittest.TestCase):
 
             app = AIIdeApp(root, runtime_root=runtime_root)
             app.handle_command("agent rotate codex")
-            with patch("ai_ide.agents.shutil.which", return_value=sys.executable):
+            with patch("backend.agents.shutil.which", return_value=sys.executable):
                 started = app.handle_command('agent start -- -u -c "print(\'gc-agent\', flush=True)"')
                 run_id = started.split()[0].split("=", 1)[1]
                 time.sleep(0.1)
@@ -1573,7 +1573,7 @@ class AIIdeAppTests(unittest.TestCase):
 
             app = AIIdeApp(root, runtime_root=runtime_root)
             app.handle_command("agent rotate codex")
-            with patch("ai_ide.agents.shutil.which", return_value=sys.executable):
+            with patch("backend.agents.shutil.which", return_value=sys.executable):
                 started = app.handle_command(
                     'agent start -- -u -c "import sys, time; line=sys.stdin.readline().strip(); print(f\'app-received:{line}\', flush=True); time.sleep(0.2)"'
                 )
@@ -1596,7 +1596,7 @@ class AIIdeAppTests(unittest.TestCase):
 
             app = AIIdeApp(root, runtime_root=runtime_root)
             app.handle_command("agent rotate codex")
-            with patch("ai_ide.agents.shutil.which", return_value=sys.executable):
+            with patch("backend.agents.shutil.which", return_value=sys.executable):
                 started = app.handle_command(
                     'agent start -- -u -c "import time; print(\'stale-agent\', flush=True); time.sleep(5)"'
                 )
@@ -1621,7 +1621,7 @@ class AIIdeAppTests(unittest.TestCase):
             right = app.handle_command("term new right").split()[1]
             app.handle_command(f"term msg {left} {right} hello")
             app.handle_command("agent rotate codex")
-            with patch("ai_ide.agents.shutil.which", return_value=sys.executable):
+            with patch("backend.agents.shutil.which", return_value=sys.executable):
                 started = app.handle_command(
                     'agent start -- -u -c "import time; print(\'event-agent\', flush=True); time.sleep(0.2)"'
                 )
@@ -1633,7 +1633,7 @@ class AIIdeAppTests(unittest.TestCase):
             self.assertIn("terminal.message.sent", events)
 
     def test_term_new_rejects_when_terminal_limit_is_exceeded(self) -> None:
-        from ai_ide.terminal import MAX_TERMINALS
+        from backend.terminal import MAX_TERMINALS
 
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -1665,7 +1665,7 @@ class AIIdeAppTests(unittest.TestCase):
             app.handle_command(f"term msg {left_id} {right_id} hello")
             first_event_id = app.handle_command("events list 1").split()[0]
             app.handle_command("agent rotate codex")
-            with patch("ai_ide.agents.shutil.which", return_value=sys.executable):
+            with patch("backend.agents.shutil.which", return_value=sys.executable):
                 started = app.handle_command(
                     'agent start -- -u -c "print(\'tail-agent\', flush=True)"'
                 )
@@ -1711,7 +1711,7 @@ class AIIdeAppTests(unittest.TestCase):
 
             app = AIIdeApp(root, runtime_root=runtime_root)
             app.handle_command("agent rotate codex")
-            with patch("ai_ide.agents.shutil.which", return_value=sys.executable):
+            with patch("backend.agents.shutil.which", return_value=sys.executable):
                 started = app.handle_command(
                     'agent start -- -u -c "import time; print(\'event-auto\', flush=True); time.sleep(0.2); print(\'event-done\', flush=True)"'
                 )
@@ -1900,7 +1900,7 @@ class AIIdeAppTests(unittest.TestCase):
             terminal_id = app.handle_command("term new watcher").split()[1]
             app.handle_command(f"term watch {terminal_id} agent.run")
             app.handle_command("agent rotate codex")
-            with patch("ai_ide.agents.shutil.which", return_value=sys.executable):
+            with patch("backend.agents.shutil.which", return_value=sys.executable):
                 started = app.handle_command(
                     'agent start -- -u -c "print(\'watch-agent\', flush=True)"'
                 )
@@ -1913,7 +1913,7 @@ class AIIdeAppTests(unittest.TestCase):
             self.assertIn("agent.run.completed", inbox)
 
     def test_term_watch_rejects_when_watch_limit_is_exceeded(self) -> None:
-        from ai_ide.terminal_watch_manager import MAX_TERMINAL_EVENT_WATCHES
+        from backend.terminal_watch_manager import MAX_TERMINAL_EVENT_WATCHES
 
         with tempfile.TemporaryDirectory() as temp_dir:
             base = Path(temp_dir)
@@ -1943,7 +1943,7 @@ class AIIdeAppTests(unittest.TestCase):
             terminal_id = app.handle_command("term new watcher").split()[1]
             app.handle_command(f"term watch {terminal_id} agent.run")
             app.handle_command("agent rotate codex")
-            with patch("ai_ide.agents.shutil.which", return_value=sys.executable):
+            with patch("backend.agents.shutil.which", return_value=sys.executable):
                 started = app.handle_command(
                     'agent start -- -u -c "import time; print(\'term-auto\', flush=True); time.sleep(0.2); print(\'term-done\', flush=True)"'
                 )
@@ -1970,7 +1970,7 @@ class AIIdeAppTests(unittest.TestCase):
             app = AIIdeApp(root, runtime_root=runtime_root)
             terminal_id = app.handle_command("term new watcher").split()[1]
             app.handle_command("agent rotate codex")
-            with patch("ai_ide.agents.shutil.which", return_value=sys.executable):
+            with patch("backend.agents.shutil.which", return_value=sys.executable):
                 started = app.handle_command(
                     'agent start -- -u -c "print(\'watch-agent\', flush=True)"'
                 )
@@ -2025,7 +2025,7 @@ class AIIdeAppTests(unittest.TestCase):
             app = AIIdeApp(root, runtime_root=runtime_root)
             app.handle_command("agent rotate codex")
             terminal_id = app.handle_command("term new --mode strict bridge").split()[1]
-            with patch("ai_ide.agents.shutil.which", return_value=sys.executable):
+            with patch("backend.agents.shutil.which", return_value=sys.executable):
                 started = app.handle_command(
                     'agent start -- -u -c "import sys, time; line=sys.stdin.readline().strip(); print(f\'bridge:{line}\', flush=True); time.sleep(0.2)"'
                 )
@@ -2053,11 +2053,11 @@ class AIIdeAppTests(unittest.TestCase):
             app = AIIdeApp(root, runtime_root=runtime_root)
             app.handle_command("agent rotate codex")
             terminal_id = app.handle_command("term new --mode strict bridge").split()[1]
-            helper_script = Path(__file__).resolve().parents[1] / "ai_ide" / "windows_restricted_host_helper_stub.py"
+            helper_script = Path(__file__).resolve().parents[1] / "backend" / "windows" / "windows_restricted_host_helper_stub.py"
             helper_command = f"{sys.executable} {helper_script}"
 
             with patch.dict("os.environ", {"AI_IDE_WINDOWS_STRICT_HELPER": helper_command}):
-                with patch("ai_ide.agents.shutil.which", return_value=sys.executable):
+                with patch("backend.agents.shutil.which", return_value=sys.executable):
                     started = app.handle_command(
                         'agent start --mode strict -- -u -c "import time; print(\'term-helper\', flush=True); time.sleep(5)"'
                     )
@@ -2089,11 +2089,11 @@ class AIIdeAppTests(unittest.TestCase):
             app = AIIdeApp(root, runtime_root=runtime_root)
             app.handle_command("agent rotate codex")
             terminal_id = app.handle_command("term new --mode strict bridge").split()[1]
-            helper_script = Path(__file__).resolve().parents[1] / "ai_ide" / "windows_restricted_host_helper_stub.py"
+            helper_script = Path(__file__).resolve().parents[1] / "backend" / "windows" / "windows_restricted_host_helper_stub.py"
             helper_command = f"{sys.executable} {helper_script}"
 
             with patch.dict("os.environ", {"AI_IDE_WINDOWS_STRICT_HELPER": helper_command}):
-                with patch("ai_ide.agents.shutil.which", return_value=sys.executable):
+                with patch("backend.agents.shutil.which", return_value=sys.executable):
                     started = app.handle_command(
                         'agent start --mode strict -- -u -c "import time; print(\'term-helper-json\', flush=True); time.sleep(5)"'
                     )
@@ -2128,7 +2128,7 @@ class AIIdeAppTests(unittest.TestCase):
 
             with patch.dict("os.environ", {"AI_IDE_WINDOWS_STRICT_HELPER": WINDOWS_STRICT_HELPER_RUST_DEV}):
                 with patch(
-                    "ai_ide.agents.shutil.which",
+                    "backend.agents.shutil.which",
                     side_effect=lambda name: sys.executable if name == "codex" else real_which(name),
                 ):
                     started = app.handle_command(
@@ -2195,7 +2195,7 @@ class AIIdeAppTests(unittest.TestCase):
             app = AIIdeApp(root, runtime_root=runtime_root)
             app.handle_command("agent rotate codex")
             terminal_id = app.handle_command("term new bridge").split()[1]
-            with patch("ai_ide.agents.shutil.which", return_value=sys.executable):
+            with patch("backend.agents.shutil.which", return_value=sys.executable):
                 started = app.handle_command(
                     'agent start -- -u -c "import time; print(\'bridge-json\', flush=True); time.sleep(5)"'
                 )

@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import unittest
 
-from ai_ide.agent_watch_manager import MAX_AGENT_RUN_WATCHES, AgentRunWatchManager
-from ai_ide.events import EventBus
-from ai_ide.models import AgentRunWatch
+from backend.agent_watch_manager import MAX_AGENT_RUN_WATCHES, AgentRunWatchManager
+from backend.events import EventBus
+from core.models import AgentRunWatch
 
 
 class AgentRunWatchManagerTests(unittest.TestCase):

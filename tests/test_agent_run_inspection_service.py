@@ -5,10 +5,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from ai_ide.agent_run_inspection_service import AgentRunInspectionService
-from ai_ide.models import AgentRunRecord
-from ai_ide.runner_models import RunnerProcessControl, RunnerProcessHandle
-from ai_ide.windows_strict_helper_protocol import WindowsStrictHelperStatusMessage
+from backend.agent_run_inspection_service import AgentRunInspectionService
+from core.models import AgentRunRecord
+from backend.runner_models import RunnerProcessControl, RunnerProcessHandle
+from backend.windows.windows_strict_helper_protocol import WindowsStrictHelperStatusMessage
 
 
 class _FakeProcess:

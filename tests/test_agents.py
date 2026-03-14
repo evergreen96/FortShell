@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 from unittest.mock import patch
 
-from ai_ide.agents import AgentRegistry
+from backend.agents import AgentRegistry
 
 
 class AgentRegistryTests(unittest.TestCase):
@@ -25,7 +25,7 @@ class AgentRegistryTests(unittest.TestCase):
     def test_cli_agent_probe_reports_ready_when_launcher_exists(self) -> None:
         registry = AgentRegistry()
 
-        with patch("ai_ide.agents.shutil.which", return_value="/tmp/codex"):
+        with patch("backend.agents.shutil.which", return_value="/tmp/codex"):
             probe = registry.probe("codex")
 
         self.assertTrue(probe.available)
@@ -35,7 +35,7 @@ class AgentRegistryTests(unittest.TestCase):
     def test_launch_plan_includes_launcher_when_available(self) -> None:
         registry = AgentRegistry()
 
-        with patch("ai_ide.agents.shutil.which", return_value="/tmp/claude"):
+        with patch("backend.agents.shutil.which", return_value="/tmp/claude"):
             plan = registry.launch_plan("claude")
 
         self.assertTrue(plan.available)

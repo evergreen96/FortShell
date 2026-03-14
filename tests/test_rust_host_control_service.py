@@ -4,17 +4,17 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from ai_ide.models import AgentSession, AuditEvent, ExecutionSession, PolicyState, WriteProposal
-from ai_ide.policy import PolicyEngine
-from ai_ide.policy_state_store import PolicyStateStore
-from ai_ide.review_manager import ReviewManager
-from ai_ide.review_state_store import ReviewStateStore
-from ai_ide.rust_host_client import RustHostRemoteError
-from ai_ide.rust_host_control_service import RustHostControlService
-from ai_ide.rust_host_protocol import PolicyChangeResult, PolicyChangeSnapshot, RustHostSnapshot
-from ai_ide.rust_host_protocol import AgentSessionSnapshot
-from ai_ide.rust_host_protocol import RuntimeMetricsSnapshot
-from ai_ide.workspace_models import (
+from core.models import AgentSession, AuditEvent, ExecutionSession, PolicyState, WriteProposal
+from core.policy import PolicyEngine
+from core.policy_state_store import PolicyStateStore
+from backend.review_manager import ReviewManager
+from backend.review_state_store import ReviewStateStore
+from backend.rust_host_client import RustHostRemoteError
+from backend.rust_host_control_service import RustHostControlService
+from backend.rust_host_protocol import PolicyChangeResult, PolicyChangeSnapshot, RustHostSnapshot
+from backend.rust_host_protocol import AgentSessionSnapshot
+from backend.rust_host_protocol import RuntimeMetricsSnapshot
+from core.workspace_models import (
     WorkspaceCatalogEntry,
     WorkspaceIndexEntry,
     WorkspaceIndexSnapshot,
@@ -474,7 +474,7 @@ class RustHostControlServiceTests(unittest.TestCase):
 
 
     def test_store_and_io_errors_map_to_os_error(self) -> None:
-        from ai_ide.rust_host_control_service import RustHostControlService as Svc
+        from backend.rust_host_control_service import RustHostControlService as Svc
 
         store_io_codes = [
             "review_store_error",
@@ -491,14 +491,14 @@ class RustHostControlServiceTests(unittest.TestCase):
             self.assertIn(code, str(mapped))
 
     def test_invalid_request_maps_to_value_error(self) -> None:
-        from ai_ide.rust_host_control_service import RustHostControlService as Svc
+        from backend.rust_host_control_service import RustHostControlService as Svc
 
         exc = RustHostRemoteError("invalid_request", "malformed JSON")
         mapped = Svc._map_remote_error(exc)
         self.assertIsInstance(mapped, ValueError)
 
     def test_unknown_error_code_falls_through_to_runtime_error(self) -> None:
-        from ai_ide.rust_host_control_service import RustHostControlService as Svc
+        from backend.rust_host_control_service import RustHostControlService as Svc
 
         exc = RustHostRemoteError("some_future_error", "unexpected")
         mapped = Svc._map_remote_error(exc)

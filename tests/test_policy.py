@@ -4,8 +4,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from ai_ide.models import PolicyState
-from ai_ide.policy import PolicyEngine
+from core.models import PolicyState
+from core.policy import PolicyEngine
 
 
 class PolicyEngineTests(unittest.TestCase):

@@ -4,8 +4,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from ai_ide.runner_host_service import RunnerHostService
-from ai_ide.runner_models import RunnerLaunchResult, RunnerProcessHandle, RunnerResult
+from backend.runner_host_service import RunnerHostService
+from backend.runner_models import RunnerLaunchResult, RunnerProcessHandle, RunnerResult
 
 
 class RunnerHostServiceTests(unittest.TestCase):

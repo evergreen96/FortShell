@@ -3,10 +3,10 @@ from __future__ import annotations
 import unittest
 from unittest.mock import patch
 
-from ai_ide.agent_launch_coordinator import AgentLaunchCoordinator
-from ai_ide.agents import AgentAdapter, AgentRegistry
-from ai_ide.agent_transport import AgentTransportPlanner
-from ai_ide.models import AgentSession
+from backend.agent_launch_coordinator import AgentLaunchCoordinator
+from backend.agents import AgentAdapter, AgentRegistry
+from backend.agent_transport import AgentTransportPlanner
+from core.models import AgentSession
 
 
 class AgentLaunchCoordinatorTests(unittest.TestCase):
@@ -27,7 +27,7 @@ class AgentLaunchCoordinatorTests(unittest.TestCase):
             lambda: "projected",
         )
 
-        with patch("ai_ide.agents.shutil.which", return_value="/tmp/codex"):
+        with patch("backend.agents.shutil.which", return_value="/tmp/codex"):
             prepared = coordinator.prepare(self.session)
 
         self.assertTrue(prepared.launchable)
@@ -47,7 +47,7 @@ class AgentLaunchCoordinatorTests(unittest.TestCase):
             lambda: "projected",
         )
 
-        with patch("ai_ide.agents.shutil.which", return_value=None):
+        with patch("backend.agents.shutil.which", return_value=None):
             prepared = coordinator.prepare(self.session, extra_args=["--version"])
 
         self.assertFalse(prepared.launchable)
@@ -68,7 +68,7 @@ class AgentLaunchCoordinatorTests(unittest.TestCase):
             lambda: "strict",
         )
 
-        with patch("ai_ide.agents.shutil.which", return_value="/tmp/codex"):
+        with patch("backend.agents.shutil.which", return_value="/tmp/codex"):
             prepared = coordinator.prepare(self.session)
 
         self.assertFalse(prepared.launchable)

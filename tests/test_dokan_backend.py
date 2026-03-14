@@ -8,10 +8,10 @@ from pathlib import Path
 
 from fuse import FuseOSError
 
-from ai_ide.dokan_backend import DokanFilteredOperations
-from ai_ide.internal import INTERNAL_PROJECT_METADATA_DIR_NAME, INTERNAL_RUNTIME_DIR_NAME
-from ai_ide.policy import PolicyEngine
-from ai_ide.workspace_access_service import WorkspaceAccessService
+from backend.windows.dokan_backend import DokanFilteredOperations
+from core.internal import INTERNAL_PROJECT_METADATA_DIR_NAME, INTERNAL_RUNTIME_DIR_NAME
+from core.policy import PolicyEngine
+from core.workspace_access_service import WorkspaceAccessService
 
 
 class DokanFilteredOperationsTests(unittest.TestCase):

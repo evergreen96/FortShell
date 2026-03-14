@@ -6,9 +6,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from ai_ide.runner import RunnerResult
-from ai_ide.runner_strict_service import RunnerStrictService
-from ai_ide.strict_backend_validator import StrictBackendValidationResult
+from backend.runner import RunnerResult
+from backend.runner_strict_service import RunnerStrictService
+from backend.strict_backend_validator import StrictBackendValidationResult
 
 
 class _FakeDecision:

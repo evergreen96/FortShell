@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from ai_ide.runner_dispatch_service import RunnerDispatchService
+from backend.runner_dispatch_service import RunnerDispatchService
 
 
 class _FakeRunner:

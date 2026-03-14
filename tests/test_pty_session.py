@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from ai_ide.pty_session import PtySessionConfig, PtySessionManager, pty_available
+from backend.pty_session import PtySessionConfig, PtySessionManager, pty_available
 
 
 class FakePtyBackend:
@@ -61,7 +61,7 @@ class TestPtySessionManagerLifecycle(unittest.TestCase):
             env={},
         )
 
-    @patch("ai_ide.pty_session._create_pty_backend")
+    @patch("backend.pty_session._create_pty_backend")
     def test_create_session(self, mock_create: MagicMock) -> None:
         backend = FakePtyBackend()
         mock_create.return_value = (backend, True)
@@ -79,7 +79,7 @@ class TestPtySessionManagerLifecycle(unittest.TestCase):
         # Cleanup
         manager.destroy("term-abc123")
 
-    @patch("ai_ide.pty_session._create_pty_backend")
+    @patch("backend.pty_session._create_pty_backend")
     def test_destroy_session(self, mock_create: MagicMock) -> None:
         backend = FakePtyBackend()
         mock_create.return_value = (backend, True)
@@ -91,12 +91,12 @@ class TestPtySessionManagerLifecycle(unittest.TestCase):
         self.assertFalse(manager.has_session("term-abc123"))
         self.assertFalse(backend._alive)
 
-    @patch("ai_ide.pty_session._create_pty_backend")
+    @patch("backend.pty_session._create_pty_backend")
     def test_destroy_nonexistent_is_noop(self, mock_create: MagicMock) -> None:
         manager = PtySessionManager()
         manager.destroy("nonexistent")  # Should not raise
 
-    @patch("ai_ide.pty_session._create_pty_backend")
+    @patch("backend.pty_session._create_pty_backend")
     def test_write_to_session(self, mock_create: MagicMock) -> None:
         backend = FakePtyBackend()
         mock_create.return_value = (backend, True)
@@ -109,7 +109,7 @@ class TestPtySessionManagerLifecycle(unittest.TestCase):
 
         manager.destroy("term-abc123")
 
-    @patch("ai_ide.pty_session._create_pty_backend")
+    @patch("backend.pty_session._create_pty_backend")
     def test_resize_session(self, mock_create: MagicMock) -> None:
         backend = FakePtyBackend()
         mock_create.return_value = (backend, True)
@@ -125,7 +125,7 @@ class TestPtySessionManagerLifecycle(unittest.TestCase):
 
         manager.destroy("term-abc123")
 
-    @patch("ai_ide.pty_session._create_pty_backend")
+    @patch("backend.pty_session._create_pty_backend")
     def test_get_output_drains_buffer(self, mock_create: MagicMock) -> None:
         backend = FakePtyBackend()
         mock_create.return_value = (backend, True)
@@ -147,20 +147,20 @@ class TestPtySessionManagerLifecycle(unittest.TestCase):
 
         manager.destroy("term-abc123")
 
-    @patch("ai_ide.pty_session._create_pty_backend")
+    @patch("backend.pty_session._create_pty_backend")
     def test_write_to_unknown_raises(self, mock_create: MagicMock) -> None:
         manager = PtySessionManager()
         with self.assertRaises(KeyError):
             manager.write("nonexistent", "data")
 
-    @patch("ai_ide.pty_session._create_pty_backend")
+    @patch("backend.pty_session._create_pty_backend")
     def test_create_fails_when_unavailable(self, mock_create: MagicMock) -> None:
         mock_create.return_value = (None, False)
         manager = PtySessionManager()
         with self.assertRaises(RuntimeError):
             manager.create(self._make_config())
 
-    @patch("ai_ide.pty_session._create_pty_backend")
+    @patch("backend.pty_session._create_pty_backend")
     def test_destroy_all(self, mock_create: MagicMock) -> None:
         backends = []
         def make_backend():
@@ -180,7 +180,7 @@ class TestPtySessionManagerLifecycle(unittest.TestCase):
         for b in backends:
             self.assertFalse(b._alive)
 
-    @patch("ai_ide.pty_session._create_pty_backend")
+    @patch("backend.pty_session._create_pty_backend")
     def test_output_callback_invoked(self, mock_create: MagicMock) -> None:
         backend = FakePtyBackend()
         backend._output_queue.append(b"hello")
@@ -205,12 +205,12 @@ class TestPtySessionManagerLifecycle(unittest.TestCase):
 class TestPtyAvailable(unittest.TestCase):
     """Test pty_available detection."""
 
-    @patch("ai_ide.pty_session._create_pty_backend")
+    @patch("backend.pty_session._create_pty_backend")
     def test_pty_available_returns_true_when_backend_available(self, mock_create: MagicMock) -> None:
         mock_create.return_value = (MagicMock(), True)
         self.assertTrue(pty_available())
 
-    @patch("ai_ide.pty_session._create_pty_backend")
+    @patch("backend.pty_session._create_pty_backend")
     def test_pty_available_returns_false_when_unavailable(self, mock_create: MagicMock) -> None:
         mock_create.return_value = (None, False)
         self.assertFalse(pty_available())

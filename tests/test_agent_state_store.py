@@ -6,8 +6,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from ai_ide.agent_state_store import AgentRuntimeStateStore
-from ai_ide.models import MAX_AGENT_RUN_STREAM_BYTES, AgentRunRecord, AgentRunWatch
+from backend.agent_state_store import AgentRuntimeStateStore
+from core.models import MAX_AGENT_RUN_STREAM_BYTES, AgentRunRecord, AgentRunWatch
 
 
 class AgentRuntimeStateStoreTests(unittest.TestCase):
