@@ -1,6 +1,6 @@
 # AI IDE 작업 계획
 
-## 현재 단계: 제품 재설계 (터미널 중심 + filtered filesystem)
+## 현재 단계: 제품 재설계 (터미널 중심 + protected filesystem)
 
 ---
 
@@ -23,56 +23,72 @@
 - Tauri IPC + Python sidecar (JSON-line protocol)
 
 ### PoC 완료 ✅
-- **Dokan filtered passthrough**: 12/12 테스트 통과 (Windows)
-  - ls/find/rg/grep/cat 전부에서 숨긴 파일 안 보임
-  - 읽기/쓰기/생성/삭제 → 원본에 즉시 반영
-  - 파일 단위 + 폴더 단위 숨김 모두 동작
+- **Dokan filtered passthrough**: PoC 통과 (Windows, 숨김 모델 기준)
   - LGPL 라이선스 (무료 상용)
-- **ProjFS**: write-through 구조적으로 부적합 → 탈락
-- **WinFsp**: 동작하지만 GPLv3 ($6K/3yr) → 탈락
+  - 읽기/쓰기/생성/삭제 → 원본에 즉시 반영
+  - 주의: PoC는 이전 숨김(ENOENT) 모델 기준. 보호(EACCES) 모델로 재검증 필요
+
+### 프로젝트 구조 리팩토링 ✅
+- `ai_ide/` flat 구조 → `core/`, `backend/`, `backend/windows/` 등으로 분리
+- 578 passed, 4 skipped
+
+---
+
+## 스펙 변경: 숨김 → 보호
+
+이전: protected 파일을 **숨김** (ls에서 안 보임, ENOENT)
+현재: protected 파일을 **보호** (ls에서 보임, 읽기/쓰기 시 Permission Denied)
+
+| 연산 | 이전 (숨김) | 현재 (보호) |
+|------|-------------|-------------|
+| `ls`, `find`, `readdir` | 안 보임 | **보임** |
+| `stat`, `getattr` | ENOENT | **정상 반환 (권한 없음 표시)** |
+| `cat`, `read`, `open` | ENOENT | **EACCES (Permission Denied)** |
+| `write`, `create` | ENOENT | **EACCES** |
+| `chmod`, `chown` | N/A | **EACCES (우회 불가)** |
+| `rm`, `unlink` | ENOENT | **EACCES** |
 
 ---
 
 ## 기존 구현에서 변경되는 부분
 
 ### 폐기 대상
-- `ai_ide/projection.py` — copy-based projected workspace (shutil.copy2). FilteredFSBackend으로 대체.
-- `ai_ide/runner_projected_service.py` — 복사본 안에서 명령 실행. 필터된 마운트 포인트에서 직접 실행으로 변경.
-- 에디터의 stage → apply/reject 기본 흐름 — 기본은 직접 저장, review는 선택 옵션으로 내림.
+- `backend/projection.py` — copy-based projected workspace. FilteredFSBackend으로 대체.
+- `backend/runner_projected_service.py` — 복사본 안에서 명령 실행. 필터된 마운트에서 직접 실행으로 변경.
+- 에디터 stage → apply/reject 기본 흐름 — 기본은 직접 저장, review는 선택 옵션.
 
-### 축소/변경 대상
-- `ai_ide/editor_service.py` — stage/apply를 기본이 아닌 옵션으로. 기본 편집은 원본 직접 저장.
-- `ai_ide/review_manager.py` — 삭제하지 않지만 핵심 경로에서 선택 경로로 이동.
-- `desktop/src/App.tsx` 프론트 — stage/apply/reject UI를 기본 흐름에서 내림.
+### 수정 대상
+- `backend/windows/dokan_backend.py` — ENOENT → EACCES 변경, readdir에 protected 파일 포함
+- `core/filtered_fs_backend.py` — 인터페이스에 protection 모드 반영
+
+### 축소/폐기 추가 대상
+- `SessionManager`의 세션 회전 로직 — 정책 변경이 filesystem에서 즉시 반영되므로 터미널 재시작/stale 마킹 불필요. 단순 세션 ID 관리로 축소 가능.
+- `TerminalManager`의 `mark_execution_session_stale()` — 같은 이유로 불필요.
 
 ### 유지 대상
-- `PolicyEngine` — deny 규칙 관리. FilteredFSBackend에 규칙을 전달하는 역할로 유지.
-- `TerminalManager` + PTY — 멀티 터미널 관리. CWD만 필터된 마운트 포인트로 변경.
-- `EventBus`, `SessionManager`, `ToolBroker` — 감사/세션/메트릭은 그대로 유지.
-- `AgentRuntimeManager` — 에이전트 실행/감시 유지.
+- `PolicyEngine` — deny 규칙 관리. "deny = protected"로 의미만 변경, 구조 동일.
+- `TerminalManager` + PTY — CWD를 필터된 마운트 포인트로 설정. (stale 로직은 제거)
+- `EventBus`, `ToolBroker` — 감사/메트릭 유지.
 
 ---
 
 ## 새 계획
 
-### 1단계: FilteredFSBackend 인터페이스 + Dokan 기반 Windows backend 구현
-- [x] `FilteredFSBackend` 공통 인터페이스 정의 (mount, unmount, update_policy)
-- [x] Dokan backend 구현 (PoC 코드를 backend 인터페이스로 정리)
-- [x] PolicyEngine 변경 → backend에 deny 목록 동적 전달
-- [x] 앱 시작 시 마운트 자동화, 종료 시 unmount
-- [x] 마운트 포인트를 터미널 CWD로 설정
+### 1단계: core 인터페이스 확정 (OS 공통)
+- [ ] `FilteredFSBackend` 인터페이스를 protection 모델로 업데이트
+- [ ] backend 계약 테스트 정의 (readdir 포함, open EACCES, chmod EACCES 등)
+- [ ] PolicyEngine의 deny = protected 의미 정리
 
-### 2단계: UI 레이아웃 재설계
-- [x] 터미널을 주 패널로 (상단 우측)
-- [x] 파일 트리를 좌측 패널 (원본 전체 보기 + 숨김 토글)
-- [x] 에디터를 하단 패널 (보조)
-- [x] 파일트리 숨김 토글 → PolicyEngine → backend 반영
+### 2단계: Windows backend 수정 (Dokan)
+- [ ] `dokan_backend.py` — readdir에 protected 파일 포함
+- [ ] `dokan_backend.py` — open/read/write → EACCES
+- [ ] `dokan_backend.py` — getattr → 권한 0 반환
+- [ ] `dokan_backend.py` — chmod/chown/rm → EACCES
+- [ ] Dokan E2E 테스트 업데이트
 
-### 3단계: 멀티 터미널 강화
-- [x] 관리형 터미널: CWD = 필터된 마운트 포인트
-- [x] PTY 기반 실제 터미널 (claude code, codex 등 실행)
-- [x] 터미널 탭 관리
-- [x] 비관리형 터미널 (선택 옵션, 원본 CWD, "unfiltered" 표시)
+### 3단계: UI 업데이트
+- [ ] 파일트리에서 "숨김" → "보호" 용어/아이콘 변경
+- [ ] 터미널에서 protected 파일이 보이지만 접근 거부되는 UX 확인
 
 ### 4단계: 크로스 플랫폼
 - [ ] macOS backend 연구 (macFUSE, FSKit, 또는 대안)
@@ -83,8 +99,8 @@
 
 | 순서 | 플랫폼 | 단계 |
 |------|--------|------|
-| 1 | Windows | 구현 (Dokan 검증됨) |
-| 1 | macOS | 연구 병행 (backend 후보 조사) |
+| 1 | Windows | 구현 (Dokan) |
+| 1 | macOS | 연구 병행 |
 | 2 | Linux / WSL | 후속 구현 |
 
 ### 5단계: 운영성/안정성
@@ -97,8 +113,8 @@
 
 ## 현재 상태 요약
 
-**제품 방향**: 터미널 중심 IDE. 파일트리에서 숨김 설정 → 터미널에서 파일시스템 수준으로 안 보임. 복사본 없음, 동기화 없음.
+**제품 방향**: 터미널 중심 IDE. 파일트리에서 보호 설정 → 터미널에서 파일은 보이지만 읽기/쓰기 거부. 복사본 없음, 동기화 없음.
 
 **핵심 아키텍처**: FilteredFSBackend 인터페이스 → 플랫폼별 backend (Dokan/FUSE/macFUSE 등).
 
-**테스트 기준선**: Python 백엔드 578 passed, 4 skipped. Dokan PoC 12/12 통과.
+**테스트 기준선**: Python 백엔드 578 passed, 4 skipped.

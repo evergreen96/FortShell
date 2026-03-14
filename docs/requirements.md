@@ -4,12 +4,12 @@
 
 ### 1.1 Problem
 
-Existing IDEs treat AI as an assistant attached to the editor. This product is different: it is a **terminal-centric IDE** where multiple AI CLI tools run simultaneously, and the user controls what each terminal can see at the filesystem level.
+Existing IDEs treat AI as an assistant attached to the editor. This product is different: it is a **terminal-centric IDE** where multiple AI CLI tools run simultaneously, and the user controls what each terminal can access at the filesystem level.
 
 The core requirement is not "good autocomplete" or "AI code editor". It is:
 
 - **Terminal is the main surface.** Users run Claude Code, Codex CLI, Gemini CLI, Cursor CLI, and similar tools in managed terminals.
-- **File visibility control.** Users select files/folders to hide from the file tree. Hidden files become truly invisible to all terminal processes — `ls`, `find`, `rg`, `cat`, `grep`, direct path access, and any other filesystem operation.
+- **File access control.** Users select files/folders to protect from the file tree. Protected files are **visible but not readable** in the terminal — they exist, but any attempt to read or modify them is denied with "Permission Denied".
 - **Live workspace.** Changes made by CLI tools in the terminal are immediately reflected in the file tree and editor. No copy, no sync, no approval step required.
 - **Editor is secondary.** A code editor exists for viewing and editing files, but it is not the main workflow surface.
 
@@ -19,33 +19,35 @@ The main screen is:
 
 ```
 ┌─────────────────────────────────────────────┐
-│  File Tree (full view)  │  Terminal (filtered view)  │
-│  - see all files        │  - hidden files don't exist │
-│  - checkboxes to hide   │  - multiple CLI tabs        │
+│  File Tree (full view)  │  Terminal (protected view)   │
+│  - see all files        │  - protected files visible   │
+│  - toggles to protect   │  - but read/write denied     │
+│                         │  - multiple CLI tabs          │
 ├─────────────────────────┴──────────────────────────────┤
-│  Code Editor (secondary, read/edit visible files)      │
-└────────────────────────────────────────────────────────┘
+│  Code Editor (secondary, read/edit allowed files)       │
+└─────────────────────────────────────────────────────────┘
 ```
 
-- File tree shows ALL files, with controls to mark files/folders as hidden
-- Terminals run inside a **filtered filesystem view** where hidden files are absent
+- File tree shows ALL files, with controls to mark files/folders as protected
+- Terminals run inside a **filtered filesystem view** where protected files are visible but access-denied
 - Editor opens files from the original project for viewing/editing
 
 ### 1.3 Architecture: Filtered Filesystem
 
-The filtered view is implemented using a **userspace filesystem driver** that mirrors the project directory while hiding denied paths:
+The filtered view is implemented using a **userspace filesystem driver** that mirrors the project directory while protecting denied paths:
 
 ```
 Original project (C:/projects/myapp/):     Filtered view (Z:/ or mount point):
-├── notes/todo.txt                         ├── notes/todo.txt    ← original file
-├── secrets/token.txt                      (absent)
-├── .env                                   (absent)
-└── src/main.py                            └── src/main.py       ← original file
+├── notes/todo.txt                         ├── notes/todo.txt    ← read/write OK
+├── secrets/token.txt                      ├── secrets/token.txt ← visible, Permission Denied on read
+├── .env                                   ├── .env              ← visible, Permission Denied on read
+└── src/main.py                            └── src/main.py       ← read/write OK
 ```
 
 - **No file copies.** The filtered view reads/writes through to original files.
 - **No sync needed.** Changes in the terminal are immediately visible in the file tree and vice versa.
-- Hiding is enforced at the OS filesystem level — all programs see the same filtered view.
+- **Protected files are visible but access-denied.** `ls` shows them, but `cat`, `read`, `write`, `chmod` all return Permission Denied.
+- Protection is enforced at the OS filesystem level — all programs see the same behavior.
 
 The filtered filesystem is provided by a platform-specific backend that implements a common interface (`FilteredFSBackend`). The product code depends on the interface, not on a specific driver.
 
@@ -66,22 +68,32 @@ Initial backend candidates:
 ## 2. Product Principles
 
 - **Terminal-first.** The terminal is the primary workflow surface, not the editor.
-- **Visibility control, not write control.** The product controls what AI tools can *see*, not what they can *do*. Writes go directly to the original files.
-- **Filesystem-level enforcement.** Hidden files are invisible to all processes — not just specific tools.
+- **Access control, not invisibility.** Protected files are visible (they exist) but cannot be read or modified. This signals "user restricted this" rather than pretending the file doesn't exist.
+- **Filesystem-level enforcement.** Protection is enforced by the filesystem driver — not by tool cooperation. `chmod` and other bypass attempts are also denied.
 - **No copies, no sync.** The filtered view is a live proxy to the original project.
 - **Editor is a companion.** The editor exists for convenience, not as the main surface.
-- **Policy is simple.** Select files/folders in the tree → they disappear from the terminal view. That's it.
+- **Policy is simple.** Select files/folders in the tree → they become protected in the terminal view.
 - **Review is optional.** Staged writeback/approval is available but not the default workflow.
 - **Observability is a first-class surface.** Audit logs, metrics, and session tracking are always available.
 
 ## 3. Functional Requirements
 
-### 3.1 File Visibility Policy
+### 3.1 File Protection Policy
 
-- Users mark files/folders as hidden via the file tree UI (checkboxes or toggle).
-- Hidden files must be invisible at the filesystem level to all processes running in managed terminals.
-- This means `ls`, `find`, `rg`, `grep`, `cat`, `python`, `node`, and any other process cannot discover or access hidden files through the filtered view.
-- Policy changes (hide/unhide) must update the filtered filesystem view. Existing terminals may require restart or re-mount.
+- Users mark files/folders as protected via the file tree UI (toggles).
+- Protected files must be **visible but access-denied** at the filesystem level to all processes running in managed terminals.
+- Specifically for protected paths:
+  - `ls`, `find`, `readdir` → file/folder **IS listed** (visible, exists)
+  - `stat`, `getattr` → returns file metadata with **zero permissions** (----------)
+  - `cd` into protected directory → **allowed** (directory traversal OK, but contents are protected)
+  - `cat`, `read`, `open` → **Permission Denied** (EACCES)
+  - `write`, `create` inside protected dir → **Permission Denied**
+  - `chmod`, `chown` → **Permission Denied** (cannot change protection)
+  - `rm`, `unlink`, `rmdir` → **Permission Denied** (cannot delete)
+  - `cp`, `mv`, `rename` → **Permission Denied** if source or target is protected
+  - `ln`, `symlink`, `hardlink` to protected file → **Permission Denied**
+- Protected file access attempts (EACCES) are recorded in the audit log.
+- Policy changes (protect/unprotect) are reflected **immediately** at the filesystem level. No terminal restart, no session rotation, no CLI notification. The next filesystem access from any terminal simply sees the new state.
 - Policy is stored per-project (e.g., `.ai-ide/policy.json`).
 
 ### 3.2 Managed Multi-Terminal
@@ -90,15 +102,16 @@ Initial backend candidates:
 - Each terminal runs with its working directory set to the filtered filesystem view.
 - Terminals must support PTY semantics: resize, ANSI colors, interactive prompts.
 - Terminal types:
-  - **Managed terminal:** CWD is the filtered view. AI CLI tools run here.
+  - **Managed terminal:** CWD is the filtered view. AI CLI tools run here. Protected files are access-denied.
   - **Unrestricted terminal (optional):** CWD is the original project. For user's own use, marked as "unfiltered".
 
 ### 3.3 File Tree
 
 - Shows ALL files in the original project directory.
-- Provides controls (checkboxes, toggles) to mark files/folders as hidden.
+- Provides controls (toggles) to mark files/folders as protected.
 - Reflects filesystem changes in real-time (file watcher).
-- Hidden files are visually distinguished (dimmed, icon, strikethrough) but still visible in the tree for management purposes.
+- Protected files are visually distinguished (lock icon, dimmed, badge) but visible in the tree.
+- Clicking a protected file in the file tree opens it in the editor from the **original** project (not from the filtered view). The editor reads the original — protection only applies to managed terminals.
 
 ### 3.4 Code Editor
 
@@ -124,8 +137,10 @@ Initial backend candidates:
 
 ### 4.1 Security
 
-- Hidden files must be enforced at the filesystem level, not by tool cooperation.
+- File protection must be enforced at the filesystem level, not by tool cooperation.
 - The filtered filesystem view must prevent path traversal (`../secrets/`) and symlink escape.
+- `chmod` and permission-changing operations on protected files must be denied — the protection is controlled only by the IDE policy, not by filesystem permissions.
+- Symlink and hardlink creation targeting protected files must be denied — prevents protection bypass through aliases.
 - The product boundary is the active workspace. Paths outside the workspace root are accessible normally (e.g., global tool configs like `~/.claude/`).
 
 ### 4.2 Maintainability
@@ -167,7 +182,7 @@ The filtered filesystem is the core product differentiator. Product code depends
 
 ```
 앱 코드 (공통):
-  PolicyEngine       → deny/allow 규칙 관리
+  PolicyEngine       → protect/allow 규칙 관리
   FilteredFSBackend  → mount / unmount / update_policy 인터페이스
             │
     ┌───────┼───────┐
@@ -186,17 +201,8 @@ The filtered filesystem is the core product differentiator. Product code depends
 | 설치 | 앱 installer에서 Dokan MSI 자동 설치 (1회, 관리자 UAC) |
 | 마운트 방식 | 드라이브 문자 (예: Z:) |
 | PTY | winpty / ConPTY |
-| 테스트 상태 | PoC 12/12 통과 |
+| 테스트 상태 | PoC 통과 |
 | 배포 | Dokan 드라이버 + 앱 exe를 installer에 포함 |
-
-설치 흐름:
-```
-앱 설치 프로그램 실행
-  → Dokan 드라이버 설치 여부 확인
-  → 미설치 시 Dokan MSI 자동 설치 (UAC 1회)
-  → 앱 설치
-  → 이후 실행은 일반 권한
-```
 
 ### 6.3 Linux (후보 — 후속 구현)
 
@@ -208,11 +214,6 @@ The filtered filesystem is the core product differentiator. Product code depends
 | 테스트 상태 | 미테스트 |
 | 예상 리스크 | 낮음 — FUSE는 안정된 기술 |
 
-주의사항:
-- libfuse2 vs libfuse3 API 차이 존재
-- WSL2에서는 FUSE 커널 모듈 미포함 가능
-- 구현 바인딩은 Windows backend 확정 후 결정
-
 ### 6.4 macOS (연구 — 병행 조사)
 
 | 항목 | 내용 |
@@ -222,40 +223,28 @@ The filtered filesystem is the core product differentiator. Product code depends
 | 테스트 상태 | 미테스트 (Mac 장비 필요) |
 | 예상 리스크 | 높음 |
 
-리스크:
-- macOS 시스템 확장 정책이 점점 엄격해짐 (SIP, KEXT → SystemExtension 전환)
-- macFUSE 설치 UX가 사용자에게 부담 (시스템 환경설정 승인, 재시동)
-- macFUSE 4.x부터 FSKit 백엔드 전환 중 — API 안정성 미확인
-- Apple Silicon / Intel 모두 지원 필요
-- **backend 선택지가 아직 확정되지 않음** — Windows Dokan과 같은 수준의 검증이 필요
-
 ### 6.5 플랫폼 우선순위
 
 | 순서 | 플랫폼 | 단계 | 이유 |
 |------|--------|------|------|
 | 1 | **Windows** | 구현 | 개발 환경, PoC 완료, Dokan 검증됨 |
-| 1 | **macOS** | 연구 병행 | 주요 타겟이지만 backend 선택지 불확실 (macFUSE 설치 UX, 라이선스, SIP 정책) |
+| 1 | **macOS** | 연구 병행 | 주요 타겟이지만 backend 선택지 불확실 |
 | 2 | **Linux / WSL** | 후속 | backend 후보(libfuse)는 안정적이나 우선순위 낮음 |
 
-### 6.6 공통 코드 vs 플랫폼별 코드
+### 6.6 프로젝트 구조
 
 ```
-공통 (플랫폼 분기 없음):
-  filtered_fs_backend.py     ← FilteredFSBackend 인터페이스 정의
-  policy_engine.py           ← deny/allow 규칙
-  file_watcher.py            ← 파일트리 실시간 반영
-  audit.py                   ← 감사 로그
-  앱 UI 전체                 ← Tauri + React
-
-플랫폼별 backend 구현:
-  backends/
-    ├── dokan_backend.py     ← Windows (Dokan, 검증됨)
-    ├── fuse_backend.py      ← Linux (libfuse, 후보)
-    └── macos_backend.py     ← macOS (미정, 연구 필요)
-
-플랫폼별 유틸리티:
-  mount_manager.py           ← 마운트 포인트 관리 (드라이브 문자 vs 디렉토리)
-  driver_check.py            ← 드라이버 설치 여부 확인
+core/              ← 공통 인터페이스, 모델, 정책 (플랫폼 무관)
+backend/           ← 앱 오케스트레이션, 서비스 (플랫폼 무관)
+  ├── windows/     ← Windows backend (Dokan, PTY, helper)
+  ├── linux/       ← Linux backend (FUSE, PTY)
+  ├── mac/         ← macOS backend (연구)
+  └── wsl/         ← WSL 전용
+desktop/           ← 프론트엔드 (Tauri + React)
+rust/              ← Rust 코드 (참고/유지)
+tests/             ← 테스트
+docs/              ← 문서
+prototypes/        ← PoC
 ```
 
 ## 7. Success Criteria
@@ -263,10 +252,10 @@ The filtered filesystem is the core product differentiator. Product code depends
 ### 7.1 MVP
 
 - Open a project folder in the app.
-- Mark files/folders as hidden in the file tree.
-- Open a managed terminal — hidden files are invisible to all commands.
-- Run an AI CLI tool (e.g., Claude Code) in the terminal — it cannot find hidden files.
-- Edit a file in the terminal — the change appears immediately in the file tree.
+- Mark files/folders as protected in the file tree.
+- Open a managed terminal — protected files are visible but access-denied.
+- Run an AI CLI tool (e.g., Claude Code) in the terminal — it sees the file exists but cannot read it.
+- Edit an unprotected file in the terminal — the change appears immediately in the file tree.
 - Basic audit logging of policy changes and terminal sessions.
 
 ### 7.2 Post-MVP
