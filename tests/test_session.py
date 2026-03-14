@@ -4,9 +4,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from ai_ide.models import AgentSession, ExecutionSession
-from ai_ide.policy import PolicyEngine
-from ai_ide.session import (
+from core.models import AgentSession, ExecutionSession
+from core.policy import PolicyEngine
+from backend.session import (
     MAX_AGENT_SESSION_HISTORY,
     MAX_EXECUTION_SESSION_HISTORY,
     SessionManager,

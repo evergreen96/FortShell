@@ -10,13 +10,13 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from ai_ide.platforms import StrictSandboxProbe, get_platform_adapter
-from ai_ide.policy import PolicyEngine
-from ai_ide.projection import ProjectedWorkspaceManager
-from ai_ide.runner import RunnerManager, RunnerResult, _build_strict_environment
-from ai_ide.session import SessionManager
-from ai_ide.strict_backend_validator import StrictBackendValidationResult
-from ai_ide.windows_strict_helper_resolution import WINDOWS_STRICT_HELPER_RUST_DEV
+from backend.windows.platforms import StrictSandboxProbe, get_platform_adapter
+from core.policy import PolicyEngine
+from backend.projection import ProjectedWorkspaceManager
+from backend.runner import RunnerManager, RunnerResult, _build_strict_environment
+from backend.session import SessionManager
+from backend.strict_backend_validator import StrictBackendValidationResult
+from backend.windows.windows_strict_helper_resolution import WINDOWS_STRICT_HELPER_RUST_DEV
 
 
 LISTING_COMMAND = 'python -c "import os; print(chr(10).join(sorted(os.listdir(\'.\'))))"'
@@ -318,7 +318,7 @@ class RunnerManagerTests(unittest.TestCase):
                 return_value=StrictBackendValidationResult(True),
             ):
                 with patch(
-                    "ai_ide.runner._run_subprocess",
+                    "backend.runner._run_subprocess",
                     side_effect=[
                         OSError("wsl.exe unavailable"),
                         RunnerResult(
@@ -380,7 +380,7 @@ class RunnerManagerTests(unittest.TestCase):
 
     def test_strict_mode_can_launch_configured_windows_helper_stub(self) -> None:
         self.runners.set_mode("strict")
-        helper_script = Path(__file__).resolve().parents[1] / "ai_ide" / "windows_restricted_host_helper_stub.py"
+        helper_script = Path(__file__).resolve().parents[1] / "backend" / "windows" / "windows_restricted_host_helper_stub.py"
         helper_command = f"{sys.executable} {helper_script}"
 
         with patch.dict("os.environ", {"AI_IDE_WINDOWS_STRICT_HELPER": helper_command}):
@@ -484,7 +484,7 @@ class RunnerManagerTests(unittest.TestCase):
         self.assertIn("safe=visible", result.stdout)
 
     def test_runner_validate_passes_with_configured_windows_helper_stub(self) -> None:
-        helper_script = Path(__file__).resolve().parents[1] / "ai_ide" / "windows_restricted_host_helper_stub.py"
+        helper_script = Path(__file__).resolve().parents[1] / "backend" / "windows" / "windows_restricted_host_helper_stub.py"
         helper_command = f"{sys.executable} {helper_script}"
 
         with patch.dict("os.environ", {"AI_IDE_WINDOWS_STRICT_HELPER": helper_command}):
@@ -506,7 +506,7 @@ class RunnerManagerTests(unittest.TestCase):
         self.assertTrue(all(check.passed for check in report.checks))
 
     def test_strict_mode_start_process_can_stream_through_configured_windows_helper_stub(self) -> None:
-        helper_script = Path(__file__).resolve().parents[1] / "ai_ide" / "windows_restricted_host_helper_stub.py"
+        helper_script = Path(__file__).resolve().parents[1] / "backend" / "windows" / "windows_restricted_host_helper_stub.py"
         helper_command = f"{sys.executable} {helper_script}"
 
         with patch.dict("os.environ", {"AI_IDE_WINDOWS_STRICT_HELPER": helper_command}):

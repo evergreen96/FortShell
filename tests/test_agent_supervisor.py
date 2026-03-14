@@ -5,9 +5,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from ai_ide.agent_supervisor import AgentRunSupervisor
-from ai_ide.models import AgentRunRecord
-from ai_ide.runner import RunnerProcessHandle
+from backend.agent_supervisor import AgentRunSupervisor
+from core.models import AgentRunRecord
+from backend.runner import RunnerProcessHandle
 
 
 class _FakeProcess:

@@ -4,13 +4,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from ai_ide.agent_run_inspection_service import AgentProcessInspection, AgentRunInspection
-from ai_ide.events import EventBus
-from ai_ide.models import AgentRunRecord, TerminalEventWatch, TerminalSession, UsageMetrics
-from ai_ide.runner import RunnerResult
-from ai_ide.terminal_inbox import TerminalInboxEntry
-from ai_ide.terminal import MAX_TERMINALS, TerminalManager
-from ai_ide.terminal_watch_manager import MAX_TERMINAL_EVENT_WATCHES
+from backend.agent_run_inspection_service import AgentProcessInspection, AgentRunInspection
+from backend.events import EventBus
+from core.models import AgentRunRecord, TerminalEventWatch, TerminalSession, UsageMetrics
+from backend.runner import RunnerResult
+from backend.terminal_inbox import TerminalInboxEntry
+from backend.terminal import MAX_TERMINALS, TerminalManager
+from backend.terminal_watch_manager import MAX_TERMINAL_EVENT_WATCHES
 
 
 class FakeRunnerManager:

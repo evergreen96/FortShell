@@ -4,14 +4,14 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from ai_ide.models import PolicyState
-from ai_ide.rust_host_client import (
+from core.models import PolicyState
+from backend.rust_host_client import (
     RustHostClient,
     RustHostRemoteError,
     RustHostTransportError,
     build_rust_host_command,
 )
-from ai_ide.rust_host_protocol import (
+from backend.rust_host_protocol import (
     RustHostSnapshot,
     policy_add_deny_rule_request,
     snapshot_request,

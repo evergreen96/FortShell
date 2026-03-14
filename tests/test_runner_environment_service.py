@@ -4,7 +4,7 @@ import os
 import unittest
 from unittest.mock import patch
 
-from ai_ide.runner_environment_service import RunnerEnvironmentService
+from backend.runner_environment_service import RunnerEnvironmentService
 
 
 class RunnerEnvironmentServiceTests(unittest.TestCase):
@@ -42,7 +42,7 @@ class RunnerEnvironmentServiceTests(unittest.TestCase):
         self.assertIn("hello world", command)
 
     def test_argv_to_command_uses_windows_cmdline_joining_on_windows(self) -> None:
-        with patch("ai_ide.runner_environment_service.os.name", "nt"):
+        with patch("backend.runner_environment_service.os.name", "nt"):
             command = self.service.argv_to_command(["python", "-c", "print('hello world')"])
 
         self.assertIn("python", command)

@@ -6,14 +6,14 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from ai_ide.models import (
+from core.models import (
     MAX_TERMINAL_COMMAND_HISTORY,
     MAX_TERMINAL_INBOX_ENTRIES,
     TerminalEventWatch,
     TerminalSession,
 )
-from ai_ide.terminal_inbox import TerminalInboxEntry
-from ai_ide.terminal_state_store import TerminalStateStore
+from backend.terminal_inbox import TerminalInboxEntry
+from backend.terminal_state_store import TerminalStateStore
 
 
 class TerminalStateStoreTests(unittest.TestCase):

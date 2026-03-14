@@ -4,16 +4,16 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from ai_ide.events import EventBus
-from ai_ide.internal import INTERNAL_PROJECT_METADATA_DIR_NAME
-from ai_ide.policy import PolicyEngine
-from ai_ide.workspace_access_service import WorkspaceAccessService
-from ai_ide.workspace_visibility_backend import PollingWorkspaceVisibilityBackend
-from ai_ide.workspace_index_snapshot_builder import WorkspaceIndexSnapshotBuilder
-from ai_ide.workspace_visibility_monitor import WorkspaceVisibilityMonitor
-from ai_ide.workspace_visibility_models import VisibleWorkspaceState
-from ai_ide.workspace_visibility_source import SnapshotWorkspaceVisibilitySource
-from ai_ide.workspace_visibility_state_store import WorkspaceVisibilityStateStore
+from backend.events import EventBus
+from core.internal import INTERNAL_PROJECT_METADATA_DIR_NAME
+from core.policy import PolicyEngine
+from core.workspace_access_service import WorkspaceAccessService
+from backend.workspace_visibility_backend import PollingWorkspaceVisibilityBackend
+from backend.workspace_index_snapshot_builder import WorkspaceIndexSnapshotBuilder
+from backend.workspace_visibility_monitor import WorkspaceVisibilityMonitor
+from backend.workspace_visibility_models import VisibleWorkspaceState
+from backend.workspace_visibility_source import SnapshotWorkspaceVisibilitySource
+from backend.workspace_visibility_state_store import WorkspaceVisibilityStateStore
 
 
 class WorkspaceVisibilityMonitorTests(unittest.TestCase):

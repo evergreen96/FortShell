@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import unittest
 
-from ai_ide.models import AgentSession, ExecutionSession, PolicyState, WriteProposal
-from ai_ide.models import AuditEvent
-from ai_ide.rust_host_protocol import (
+from core.models import AgentSession, ExecutionSession, PolicyState, WriteProposal
+from core.models import AuditEvent
+from backend.rust_host_protocol import (
     AgentSessionSnapshot,
     PolicyChangeResult,
     PolicyChangeSnapshot,
@@ -27,7 +27,7 @@ from ai_ide.rust_host_protocol import (
     workspace_list_request,
     workspace_tree_request,
 )
-from ai_ide.workspace_models import (
+from core.workspace_models import (
     WorkspaceCatalogEntry,
     WorkspaceIndexEntry,
     WorkspaceIndexSnapshot,

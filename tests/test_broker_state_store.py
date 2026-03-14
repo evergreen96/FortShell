@@ -5,8 +5,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from ai_ide.broker_state_store import BrokerStateStore
-from ai_ide.models import AuditEvent, UsageMetrics
+from backend.broker_state_store import BrokerStateStore
+from core.models import AuditEvent, UsageMetrics
 
 
 class BrokerStateStoreTests(unittest.TestCase):

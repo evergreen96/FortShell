@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import unittest
 
-from ai_ide.events import EventBus
-from ai_ide.models import TerminalEventWatch, TerminalSession
-from ai_ide.terminal_watch_manager import MAX_TERMINAL_EVENT_WATCHES, TerminalWatchManager
+from backend.events import EventBus
+from core.models import TerminalEventWatch, TerminalSession
+from backend.terminal_watch_manager import MAX_TERMINAL_EVENT_WATCHES, TerminalWatchManager
 
 
 class _FakeAgentRuntime:

@@ -7,9 +7,9 @@ import time
 import unittest
 from pathlib import Path
 
-from ai_ide.process_control_service import ProcessControlService
-from ai_ide.runner_models import RunnerProcessControl, RunnerProcessHandle
-from ai_ide.windows_strict_helper_protocol import (
+from backend.process_control_service import ProcessControlService
+from backend.runner_models import RunnerProcessControl, RunnerProcessHandle
+from backend.windows.windows_strict_helper_protocol import (
     WindowsStrictHelperStatusMessage,
     read_helper_control_message,
     write_helper_status_message,

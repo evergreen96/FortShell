@@ -5,24 +5,24 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from ai_ide.broker_state_store import BrokerStateStore
-from ai_ide.app import AIIdeApp
-from ai_ide.models import AgentSession, AuditEvent, ExecutionSession, PolicyState, UsageMetrics, WriteProposal
-from ai_ide.policy import PolicyEngine
-from ai_ide.policy_state_store import PolicyStateStore
-from ai_ide.review_state_store import ReviewStateStore
-from ai_ide.rust_host_client import RustHostRemoteError
-from ai_ide.rust_host_protocol import (
+from backend.broker_state_store import BrokerStateStore
+from backend.app import AIIdeApp
+from core.models import AgentSession, AuditEvent, ExecutionSession, PolicyState, UsageMetrics, WriteProposal
+from core.policy import PolicyEngine
+from core.policy_state_store import PolicyStateStore
+from backend.review_state_store import ReviewStateStore
+from backend.rust_host_client import RustHostRemoteError
+from backend.rust_host_protocol import (
     AgentSessionSnapshot,
     PolicyChangeResult,
     PolicyChangeSnapshot,
     RuntimeMetricsSnapshot,
     RustHostSnapshot,
 )
-from ai_ide.workspace_access_service import WorkspaceAccessService
-from ai_ide.workspace_catalog_service import WorkspaceCatalogService
-from ai_ide.workspace_index_service import WorkspaceIndexService
-from ai_ide.workspace_index_state_store import WorkspaceIndexStateStore
+from core.workspace_access_service import WorkspaceAccessService
+from backend.workspace_catalog_service import WorkspaceCatalogService
+from backend.workspace_index_service import WorkspaceIndexService
+from backend.workspace_index_state_store import WorkspaceIndexStateStore
 
 
 class _FakeRustHostClient:

@@ -5,10 +5,10 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from ai_ide.internal import INTERNAL_PROJECT_METADATA_DIR_NAME
-from ai_ide.policy import PolicyEngine
-from ai_ide.workspace_access_service import WorkspaceAccessService
-from ai_ide.workspace_catalog_service import MAX_GREP_FILE_BYTES, WorkspaceCatalogService
+from core.internal import INTERNAL_PROJECT_METADATA_DIR_NAME
+from core.policy import PolicyEngine
+from core.workspace_access_service import WorkspaceAccessService
+from backend.workspace_catalog_service import MAX_GREP_FILE_BYTES, WorkspaceCatalogService
 
 
 class WorkspaceCatalogServiceTests(unittest.TestCase):

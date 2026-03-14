@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from ai_ide.windows_strict_helper_resolution import (
+from backend.windows.windows_strict_helper_resolution import (
     WINDOWS_STRICT_HELPER_ENV,
     WINDOWS_STRICT_HELPER_RUST_DEV,
     resolve_windows_strict_helper_command,
@@ -15,7 +15,7 @@ from ai_ide.windows_strict_helper_resolution import (
 
 class WindowsStrictHelperResolutionTests(unittest.TestCase):
     def test_resolve_explicit_command_prefix_from_environment(self) -> None:
-        helper_script = Path(__file__).resolve().parents[1] / "ai_ide" / "windows_restricted_host_helper_stub.py"
+        helper_script = Path(__file__).resolve().parents[1] / "backend" / "windows" / "windows_restricted_host_helper_stub.py"
 
         with patch.dict(os.environ, {WINDOWS_STRICT_HELPER_ENV: f"{sys.executable} {helper_script}"}):
             command = resolve_windows_strict_helper_command()
@@ -25,7 +25,7 @@ class WindowsStrictHelperResolutionTests(unittest.TestCase):
     def test_resolve_path_helper_from_path_lookup(self) -> None:
         with patch.dict(os.environ, {}, clear=True):
             with patch(
-                "ai_ide.windows_strict_helper_resolution.shutil.which",
+                "backend.windows.windows_strict_helper_resolution.shutil.which",
                 side_effect=lambda name: "C:/tools/ai-ide-restricted-host-helper.exe"
                 if name == "ai-ide-restricted-host-helper.exe"
                 else None,
@@ -37,7 +37,7 @@ class WindowsStrictHelperResolutionTests(unittest.TestCase):
     def test_resolve_rust_dev_helper_to_cargo_run_prefix(self) -> None:
         with patch.dict(os.environ, {WINDOWS_STRICT_HELPER_ENV: WINDOWS_STRICT_HELPER_RUST_DEV}):
             with patch(
-                "ai_ide.windows_strict_helper_resolution.shutil.which",
+                "backend.windows.windows_strict_helper_resolution.shutil.which",
                 side_effect=lambda name: "C:/Users/test/.cargo/bin/cargo.exe" if name == "cargo" else None,
             ):
                 command = resolve_windows_strict_helper_command()
@@ -51,7 +51,7 @@ class WindowsStrictHelperResolutionTests(unittest.TestCase):
 
     def test_resolve_rust_dev_helper_returns_none_without_cargo(self) -> None:
         with patch.dict(os.environ, {WINDOWS_STRICT_HELPER_ENV: WINDOWS_STRICT_HELPER_RUST_DEV}):
-            with patch("ai_ide.windows_strict_helper_resolution.shutil.which", return_value=None):
+            with patch("backend.windows.windows_strict_helper_resolution.shutil.which", return_value=None):
                 command = resolve_windows_strict_helper_command()
 
         self.assertIsNone(command)

@@ -3,7 +3,7 @@ from __future__ import annotations
 import threading
 import unittest
 
-from ai_ide.workspace_visibility_watcher import QueueSignalWorkspaceVisibilityWatcher
+from backend.workspace_visibility_watcher import QueueSignalWorkspaceVisibilityWatcher
 
 
 class WorkspaceVisibilityWatcherTests(unittest.TestCase):

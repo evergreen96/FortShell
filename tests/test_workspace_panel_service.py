@@ -5,8 +5,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from ai_ide.app import AIIdeApp
-from ai_ide.workspace_panel_service import WorkspacePanelService
+from backend.app import AIIdeApp
+from backend.workspace_panel_service import WorkspacePanelService
 
 
 class WorkspacePanelServiceTests(unittest.TestCase):

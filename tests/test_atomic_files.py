@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from ai_ide.atomic_files import atomic_replace
+from core.atomic_files import atomic_replace
 
 
 class AtomicFilesTests(unittest.TestCase):
@@ -14,8 +14,8 @@ class AtomicFilesTests(unittest.TestCase):
             temp_path = Path(temp_dir) / "state.json.tmp"
             target_path = Path(temp_dir) / "state.json"
 
-            with patch("ai_ide.atomic_files.os.name", "nt"):
-                with patch("ai_ide.atomic_files.time.sleep", return_value=None):
+            with patch("core.atomic_files.os.name", "nt"):
+                with patch("core.atomic_files.time.sleep", return_value=None):
                     with patch.object(
                         Path,
                         "replace",
@@ -30,8 +30,8 @@ class AtomicFilesTests(unittest.TestCase):
             temp_path = Path(temp_dir) / "state.json.tmp"
             target_path = Path(temp_dir) / "state.json"
 
-            with patch("ai_ide.atomic_files.os.name", "nt"):
-                with patch("ai_ide.atomic_files.time.sleep", return_value=None):
+            with patch("core.atomic_files.os.name", "nt"):
+                with patch("core.atomic_files.time.sleep", return_value=None):
                     with patch.object(Path, "replace", side_effect=PermissionError("busy")):
                         with self.assertRaises(PermissionError):
                             atomic_replace(temp_path, target_path, retries=2)

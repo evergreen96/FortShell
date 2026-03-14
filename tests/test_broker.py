@@ -4,12 +4,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from ai_ide.broker import MAX_READ_FILE_BYTES, ToolBroker
-from ai_ide.broker_state_store import BrokerStateStore
-from ai_ide.internal import INTERNAL_PROJECT_METADATA_DIR_NAME
-from ai_ide.models import AuditEvent
-from ai_ide.policy import PolicyEngine
-from ai_ide.session import SessionManager
+from backend.broker import MAX_READ_FILE_BYTES, ToolBroker
+from backend.broker_state_store import BrokerStateStore
+from core.internal import INTERNAL_PROJECT_METADATA_DIR_NAME
+from core.models import AuditEvent
+from core.policy import PolicyEngine
+from backend.session import SessionManager
 
 
 class ToolBrokerTests(unittest.TestCase):
@@ -83,7 +83,7 @@ class ToolBrokerTests(unittest.TestCase):
 
 
     def test_audit_log_is_trimmed_when_exceeding_max_entries(self) -> None:
-        from ai_ide.broker import MAX_AUDIT_ENTRIES
+        from backend.broker import MAX_AUDIT_ENTRIES
 
         for index in range(MAX_AUDIT_ENTRIES + 50):
             (self.root / "notes" / f"file_{index}.txt").write_text(f"content {index}", encoding="utf-8")
@@ -93,7 +93,7 @@ class ToolBrokerTests(unittest.TestCase):
         self.assertEqual("read", self.broker.audit_log[-1].action)
 
     def test_audit_log_is_trimmed_on_reload(self) -> None:
-        from ai_ide.broker import MAX_AUDIT_ENTRIES
+        from backend.broker import MAX_AUDIT_ENTRIES
 
         for index in range(MAX_AUDIT_ENTRIES + 10):
             self.broker.audit_log.append(

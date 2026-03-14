@@ -5,8 +5,8 @@ from __future__ import annotations
 import unittest
 from unittest.mock import MagicMock, patch
 
-from ai_ide.desktop_api_service import DesktopApiService
-from ai_ide.desktop_sidecar import SidecarDispatcher, SidecarWriter, _classify_error
+from backend.desktop_api_service import DesktopApiService
+from backend.desktop_sidecar import SidecarDispatcher, SidecarWriter, _classify_error
 
 
 class TestSidecarDispatcher(unittest.TestCase):

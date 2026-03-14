@@ -4,9 +4,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from ai_ide.internal import INTERNAL_PROJECT_METADATA_DIR_NAME
-from ai_ide.policy import PolicyEngine
-from ai_ide.workspace_access_service import WorkspaceAccessService
+from core.internal import INTERNAL_PROJECT_METADATA_DIR_NAME
+from core.policy import PolicyEngine
+from core.workspace_access_service import WorkspaceAccessService
 
 
 class WorkspaceAccessServiceTests(unittest.TestCase):

@@ -4,9 +4,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from ai_ide.internal import INTERNAL_PROJECT_METADATA_DIR_NAME, INTERNAL_RUNTIME_DIR_NAME
-from ai_ide.policy import PolicyEngine
-from ai_ide.projection import ProjectedWorkspaceManager
+from core.internal import INTERNAL_PROJECT_METADATA_DIR_NAME, INTERNAL_RUNTIME_DIR_NAME
+from core.policy import PolicyEngine
+from backend.projection import ProjectedWorkspaceManager
 
 
 class ProjectedWorkspaceManagerTests(unittest.TestCase):

@@ -4,8 +4,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from ai_ide.platforms import StrictBackendInvocation
-from ai_ide.strict_backend_validator import StrictBackendValidator
+from backend.windows.platforms import StrictBackendInvocation
+from backend.strict_backend_validator import StrictBackendValidator
 
 
 class StrictBackendValidatorTests(unittest.TestCase):

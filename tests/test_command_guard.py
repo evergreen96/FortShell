@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from ai_ide.command_guard import CommandGuard
+from backend.command_guard import CommandGuard
 
 
 class CommandGuardTests(unittest.TestCase):

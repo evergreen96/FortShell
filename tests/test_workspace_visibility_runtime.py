@@ -3,15 +3,15 @@ from __future__ import annotations
 import unittest
 from pathlib import Path
 
-from ai_ide.workspace_visibility_backend import (
+from backend.workspace_visibility_backend import (
     EventDrivenWorkspaceVisibilityBackend,
     PollingWorkspaceVisibilityBackend,
 )
-from ai_ide.workspace_visibility_runtime import (
+from backend.workspace_visibility_runtime import (
     build_workspace_visibility_backend,
     resolve_workspace_visibility_watcher,
 )
-from ai_ide.workspace_visibility_models import VisibleWorkspaceState
+from backend.workspace_visibility_models import VisibleWorkspaceState
 
 
 class WorkspaceVisibilityRuntimeTests(unittest.TestCase):

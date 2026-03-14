@@ -10,8 +10,8 @@ from threading import Thread
 import time
 from unittest.mock import patch
 
-from ai_ide.windows_restricted_host_helper_stub import main
-from ai_ide.windows_strict_helper_protocol import (
+from backend.windows.windows_restricted_host_helper_stub import main
+from backend.windows.windows_strict_helper_protocol import (
     STDIO_PROXY_FLAG,
     WindowsStrictHelperControlMessage,
     read_helper_status_message,

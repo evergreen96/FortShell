@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import unittest
 
-from ai_ide.workspace_visibility_backend import (
+from backend.workspace_visibility_backend import (
     EventDrivenWorkspaceVisibilityBackend,
     PollingWorkspaceVisibilityBackend,
 )
-from ai_ide.workspace_visibility_models import VisibleWorkspaceState
+from backend.workspace_visibility_models import VisibleWorkspaceState
 
 
 class WorkspaceVisibilityBackendTests(unittest.TestCase):

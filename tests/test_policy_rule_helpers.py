@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from ai_ide.policy_rule_helpers import deny_rule_for_target
+from core.policy_rule_helpers import deny_rule_for_target
 
 
 class PolicyRuleHelperTests(unittest.TestCase):

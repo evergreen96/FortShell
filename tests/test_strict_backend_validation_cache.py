@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from ai_ide.strict_backend_validation_cache import StrictBackendValidationCache
+from backend.strict_backend_validation_cache import StrictBackendValidationCache
 
 
 class StrictBackendValidationCacheTests(unittest.TestCase):

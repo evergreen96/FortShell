@@ -6,9 +6,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from ai_ide.process_stop_service import ProcessStopService
-from ai_ide.runner_models import RunnerProcessControl, RunnerProcessHandle, RunnerProcessStopPolicy
-from ai_ide.windows_strict_helper_protocol import read_helper_control_message
+from backend.process_stop_service import ProcessStopService
+from backend.runner_models import RunnerProcessControl, RunnerProcessHandle, RunnerProcessStopPolicy
+from backend.windows.windows_strict_helper_protocol import read_helper_control_message
 
 
 class _CloseAwarePipe(io.StringIO):

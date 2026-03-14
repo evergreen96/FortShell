@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import unittest
 
-from ai_ide.events import EventBus
-from ai_ide.models import WriteProposal
-from ai_ide.review_event_publisher import ReviewEventPublisher
+from backend.events import EventBus
+from core.models import WriteProposal
+from backend.review_event_publisher import ReviewEventPublisher
 
 
 class ReviewEventPublisherTests(unittest.TestCase):

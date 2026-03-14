@@ -9,7 +9,7 @@ from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 from unittest.mock import patch
 
-from ai_ide.ui_server import serve_workspace_panel
+from backend.ui_server import serve_workspace_panel
 
 
 class UiServerTests(unittest.TestCase):

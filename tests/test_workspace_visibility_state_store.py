@@ -5,8 +5,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from ai_ide.workspace_visibility_models import VisibleWorkspaceState
-from ai_ide.workspace_visibility_state_store import WorkspaceVisibilityStateStore
+from backend.workspace_visibility_models import VisibleWorkspaceState
+from backend.workspace_visibility_state_store import WorkspaceVisibilityStateStore
 
 
 class WorkspaceVisibilityStateStoreTests(unittest.TestCase):
