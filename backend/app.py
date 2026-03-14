@@ -23,7 +23,7 @@ from backend.commands import (
     handle_workspace_command,
 )
 from backend.events import EventBus
-from core.filtered_fs_backend import create_filtered_fs_backend
+from backend.filtered_fs_factory import create_filtered_fs_backend
 from core.models import PolicyState
 from core.policy import PolicyEngine
 from core.policy_state_store import PolicyStateStore

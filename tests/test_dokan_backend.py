@@ -1,3 +1,9 @@
+"""Contract tests for the Dokan filtered filesystem backend (protection model).
+
+Protected files are VISIBLE but ACCESS-DENIED.
+These tests verify the contract that all OS backends must satisfy.
+"""
+
 from __future__ import annotations
 
 import errno
@@ -14,7 +20,9 @@ from core.policy import PolicyEngine
 from core.workspace_access_service import WorkspaceAccessService
 
 
-class DokanFilteredOperationsTests(unittest.TestCase):
+class DokanProtectionModelTests(unittest.TestCase):
+    """Contract tests: protected files visible but access-denied."""
+
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
         base = Path(self.temp_dir.name)
@@ -35,32 +43,94 @@ class DokanFilteredOperationsTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.temp_dir.cleanup()
 
-    def test_readdir_hides_denied_and_internal_entries(self) -> None:
+    # -- Visibility: protected files ARE listed --
+
+    def test_readdir_includes_protected_entries(self) -> None:
         entries = self.ops.readdir("/", None)
 
         self.assertIn("src", entries)
-        self.assertNotIn("secrets", entries)
-        self.assertNotIn(INTERNAL_PROJECT_METADATA_DIR_NAME, entries)
-        self.assertNotIn(INTERNAL_RUNTIME_DIR_NAME, entries)
+        self.assertIn("secrets", entries)
+        self.assertIn(INTERNAL_PROJECT_METADATA_DIR_NAME, entries)
 
-    def test_open_hidden_path_raises_enoent(self) -> None:
+    # -- Metadata: protected files show zero permissions --
+
+    def test_getattr_protected_returns_zero_permissions(self) -> None:
+        info = self.ops.getattr("/secrets/token.txt")
+
+        self.assertEqual(0, info["st_mode"])
+
+    def test_getattr_allowed_returns_real_permissions(self) -> None:
+        info = self.ops.getattr("/src/main.py")
+
+        self.assertNotEqual(0, info["st_mode"])
+
+    # -- Read: denied for protected --
+
+    def test_open_protected_raises_eacces(self) -> None:
         with self.assertRaises(FuseOSError) as ctx:
             self.ops.open("/secrets/token.txt", os.O_RDONLY)
+        self.assertEqual(errno.EACCES, ctx.exception.errno)
 
-        self.assertEqual(errno.ENOENT, ctx.exception.errno)
+    def test_open_allowed_succeeds(self) -> None:
+        fh = self.ops.open("/src/main.py", os.O_RDONLY)
+        self.ops.release("/src/main.py", fh)
 
-    def test_create_write_and_read_through_to_original_file(self) -> None:
+    # -- Write: denied for protected --
+
+    def test_create_in_protected_dir_raises_eacces(self) -> None:
+        with self.assertRaises(FuseOSError) as ctx:
+            self.ops.create("/secrets/new.txt", 0o644)
+        self.assertEqual(errno.EACCES, ctx.exception.errno)
+
+    # -- Modify: denied for protected --
+
+    def test_chmod_protected_raises_eacces(self) -> None:
+        with self.assertRaises(FuseOSError) as ctx:
+            self.ops.chmod("/secrets/token.txt", 0o777)
+        self.assertEqual(errno.EACCES, ctx.exception.errno)
+
+    def test_unlink_protected_raises_eacces(self) -> None:
+        with self.assertRaises(FuseOSError) as ctx:
+            self.ops.unlink("/secrets/token.txt")
+        self.assertEqual(errno.EACCES, ctx.exception.errno)
+
+    def test_rename_protected_raises_eacces(self) -> None:
+        with self.assertRaises(FuseOSError) as ctx:
+            self.ops.rename("/secrets/token.txt", "/secrets/moved.txt")
+        self.assertEqual(errno.EACCES, ctx.exception.errno)
+
+    # -- Symlink/hardlink: always denied --
+
+    def test_symlink_raises_eacces(self) -> None:
+        with self.assertRaises(FuseOSError) as ctx:
+            self.ops.symlink("/secrets/token.txt", "/link.txt")
+        self.assertEqual(errno.EACCES, ctx.exception.errno)
+
+    def test_link_raises_eacces(self) -> None:
+        with self.assertRaises(FuseOSError) as ctx:
+            self.ops.link("/secrets/token.txt", "/link.txt")
+        self.assertEqual(errno.EACCES, ctx.exception.errno)
+
+    # -- Access check --
+
+    def test_access_protected_raises_eacces(self) -> None:
+        with self.assertRaises(FuseOSError) as ctx:
+            self.ops.access("/secrets/token.txt", os.R_OK)
+        self.assertEqual(errno.EACCES, ctx.exception.errno)
+
+    # -- Allowed files: pass-through to original --
+
+    def test_create_write_read_allowed_file(self) -> None:
         fh = self.ops.create("/src/new.py", 0o644)
         try:
-            written = self.ops.write("/src/new.py", b"print('new')\n", 0, fh)
-            self.assertEqual(len(b"print('new')\n"), written)
+            self.ops.write("/src/new.py", b"print('new')\n", 0, fh)
             self.ops.flush("/src/new.py", fh)
         finally:
             self.ops.release("/src/new.py", fh)
 
         self.assertEqual("print('new')\n", (self.root / "src" / "new.py").read_text(encoding="utf-8"))
 
-    def test_rename_reflects_in_original_workspace(self) -> None:
+    def test_rename_allowed_reflects_in_original(self) -> None:
         fh = self.ops.open("/src/main.py", os.O_RDWR)
         self.ops.release("/src/main.py", fh)
 
@@ -68,6 +138,13 @@ class DokanFilteredOperationsTests(unittest.TestCase):
 
         self.assertFalse((self.root / "src" / "main.py").exists())
         self.assertTrue((self.root / "src" / "app.py").exists())
+
+    # -- Internal metadata: also protected --
+
+    def test_open_internal_metadata_raises_eacces(self) -> None:
+        with self.assertRaises(FuseOSError) as ctx:
+            self.ops.open(f"/{INTERNAL_PROJECT_METADATA_DIR_NAME}/policy.json", os.O_RDONLY)
+        self.assertEqual(errno.EACCES, ctx.exception.errno)
 
 
 if __name__ == "__main__":
