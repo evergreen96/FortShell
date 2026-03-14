@@ -1,0 +1,12 @@
+[workspace]
+members = [
+    "crates/ai-ide-adapter",
+    "crates/ai-ide-core",
+    "crates/ai-ide-control",
+    "crates/ai-ide-policy",
+    "crates/ai-ide-persistence",
+    "crates/ai-ide-protocol",
+    "crates/ai-ide-windows-helper",
+    "crates/ai-ide-workspace",
+]
+resolver = "2"

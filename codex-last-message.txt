@@ -1,0 +1,49 @@
+문서 확인
+
+- `docs/` 정상
+- `docs/plan.md` 정상
+- 현재 단계 `4단계` 표기는 코드 상태와 맞습니다. `docs/plan.md:3`
+
+현재 단계
+
+- 제품 경로는 `workspace-only`
+- 전체 백엔드 진행도는 계속 약 `70%`
+- 현재 우선순위:
+  1. `workspace-only` 경로를 더 단순하고 일관되게 유지
+  2. 안정성/운영성 이슈 정리
+  3. 제품 경로 테스트를 더 단단하게 고정
+
+이번에 한 일
+
+- `EventBus`의 event append / counter increment도 helper 경로로 모았습니다.
+- 변경:
+  - `_append_event_state(...)` 추가 `ai_ide/events.py:347`
+  - `_increment_counter()` 추가 `ai_ide/events.py:570`
+  - `_append_event_local()`이 `_append_event_state()` 사용 `ai_ide/events.py:347`
+  - `_next_event_id()`가 `_increment_counter()` 사용 `ai_ide/events.py:365`
+- 의미:
+  - event append와 counter mutation이 더 일관된 내부 경로를 보게 됐습니다.
+  - 제품 경로를 바꾸지 않으면서 shared mutable state를 더 단순하게 만든 변화입니다.
+
+검증
+
+- `python -m pytest tests/test_events.py -q`
+- 결과: `22 passed`
+
+남은 작업
+
+1. `workspace-only` 경로 정리
+- outside-root 의미와 관련된 잔여 가정 제거
+
+2. 안정성/운영성
+- logging polish
+- shared mutable state를 더 단일 경로로 모으기
+- load/restore 후 orphaned / oversized / invalid 상태 점검 계속
+
+3. 테스트 재편
+- `workspace_only_contract` + app restart 시나리오 강화 유지
+
+다음 작업
+
+- 다음은 `EventBus` 쪽에 아직 남아 있는 direct state mutation 경로가 더 있는지 같은 방식으로 계속 줄이겠습니다.
+- 기준은 같습니다: 제품 경로를 바꾸지 않고 상태 변경 경로만 더 단순하게 만들기.

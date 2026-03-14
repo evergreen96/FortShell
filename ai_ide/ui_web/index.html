@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AI IDE Workspace Panel</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="app-header">
+        <div>
+          <p class="eyebrow">AI IDE</p>
+          <h1>Workspace Panel</h1>
+          <p class="subtitle">Visible workspace tree and AI access policy controls.</p>
+        </div>
+        <form id="target-form" class="target-form">
+          <label for="target-input">Target</label>
+          <div class="target-row">
+            <input id="target-input" name="target" type="text" value="." />
+            <button id="refresh-button" type="submit">Refresh</button>
+          </div>
+        </form>
+      </header>
+
+      <section id="status-banner" class="status-banner" hidden></section>
+
+      <section class="summary-grid">
+        <article class="summary-card">
+          <h2>Session</h2>
+          <dl id="session-summary" class="summary-list"></dl>
+        </article>
+        <article class="summary-card">
+          <h2>Policy</h2>
+          <dl id="policy-summary" class="summary-list"></dl>
+        </article>
+        <article class="summary-card">
+          <h2>Workspace Index</h2>
+          <dl id="index-summary" class="summary-list"></dl>
+        </article>
+      </section>
+
+      <section class="content-grid">
+        <article class="panel-card">
+          <div class="panel-header">
+            <div>
+              <h2>Visible Entries</h2>
+              <p id="entry-count" class="muted"></p>
+            </div>
+          </div>
+          <ul id="workspace-tree" class="tree-list"></ul>
+          <p id="workspace-empty" class="empty-state" hidden>No visible entries.</p>
+        </article>
+
+        <article class="panel-card">
+          <div class="panel-header">
+            <div>
+              <h2>Deny Rules</h2>
+              <p class="muted">Remove a rule to expose matching files again.</p>
+            </div>
+          </div>
+          <ul id="policy-rules" class="rule-list"></ul>
+          <p id="policy-empty" class="empty-state" hidden>No deny rules.</p>
+        </article>
+      </section>
+    </main>
+
+    <template id="tree-item-template">
+      <li class="tree-item">
+        <div class="tree-main">
+          <span class="tree-path"></span>
+          <div class="tree-meta"></div>
+        </div>
+        <button class="tree-action" type="button">Hide from AI</button>
+      </li>
+    </template>
+
+    <template id="rule-item-template">
+      <li class="rule-item">
+        <div class="rule-main">
+          <code class="rule-value"></code>
+        </div>
+        <button class="rule-action" type="button">Allow again</button>
+      </li>
+    </template>
+
+    <script src="/app.js" defer></script>
+  </body>
+</html>

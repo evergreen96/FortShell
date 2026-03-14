@@ -1,0 +1,19 @@
+[package]
+name = "ai-ide-desktop"
+version = "0.1.0"
+description = "Tauri shell for the AI IDE prototype"
+authors = ["OpenAI Codex"]
+edition = "2021"
+
+[package.metadata.tauri-winres]
+ProductName = "AI IDE Desktop"
+FileDescription = "Desktop shell for the AI IDE prototype"
+OriginalFilename = "ai-ide-desktop.exe"
+
+[build-dependencies]
+tauri-build = { version = "2.0.0", features = [] }
+
+[dependencies]
+tauri = { version = "2.0.0", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

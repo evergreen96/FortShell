@@ -1,0 +1,12 @@
+[package]
+name = "ai-ide-adapter"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+ai-ide-control = { path = "../ai-ide-control" }
+ai-ide-core = { path = "../ai-ide-core" }
+ai-ide-persistence = { path = "../ai-ide-persistence" }
+ai-ide-protocol = { path = "../ai-ide-protocol" }
+ai-ide-workspace = { path = "../ai-ide-workspace" }
+serde_json = "1.0.145"
