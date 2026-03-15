@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from threading import RLock
-from typing import Any, List, Optional
+from typing import TYPE_CHECKING, Any, List, Optional
 
-from backend.terminal_inbox import TerminalInboxEntry
+if TYPE_CHECKING:
+    from backend.terminal_inbox import TerminalInboxEntry
 
 MAX_TERMINAL_COMMAND_HISTORY = 500
 MAX_TERMINAL_INBOX_ENTRIES = 500
