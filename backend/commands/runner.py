@@ -34,11 +34,11 @@ def handle_runner_command(app: "AIIdeApp", parts: list[str], raw: str) -> str:
         return f"runner mode={mode}"
 
     if subcommand == "refresh":
-        manifest = app.runners.refresh_projection()
+        result = app.runners.refresh_projection()
         app.sync_workspace_index_cache()
         return (
-            f"projection session={manifest.session_id} root={manifest.root} "
-            f"files={manifest.file_count} dirs={manifest.directory_count}"
+            f"filtered_fs session={result.session_id} root={result.mount_root} "
+            f"policy_version={result.policy_version}"
         )
 
     if subcommand == "exec" and len(parts) >= 3:

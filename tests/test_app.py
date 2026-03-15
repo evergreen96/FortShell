@@ -1061,8 +1061,8 @@ class AIIdeAppTests(unittest.TestCase):
             next_manifest = app.runners.refresh_projection()
 
             self.assertNotEqual(initial_session, next_session)
-            self.assertFalse(initial_manifest.root.exists())
-            self.assertTrue(next_manifest.root.exists())
+            self.assertFalse(initial_manifest.mount_root.exists())
+            self.assertTrue(next_manifest.mount_root.exists())
 
     def test_runner_refresh_refreshes_workspace_index_cache(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

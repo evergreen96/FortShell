@@ -13,7 +13,7 @@ from backend.agents import AgentAdapter, AgentRegistry
 from backend.events import EventBus
 from backend.windows.platforms import get_platform_adapter
 from core.policy import PolicyEngine
-from backend.projection import ProjectedWorkspaceManager
+from backend.filtered_fs_factory import MirrorFilteredFSBackend
 from backend.runner import RunnerManager
 from backend.session import SessionManager
 from core.models import AgentRunWatch
@@ -31,7 +31,8 @@ class AgentRuntimeManagerTests(unittest.TestCase):
         (self.root / "safe" / "todo.txt").write_text("visible", encoding="utf-8")
         self.policy = PolicyEngine(self.root)
         self.sessions = SessionManager(self.policy)
-        self.projection = ProjectedWorkspaceManager(self.root, self.policy, self.runtime_root)
+        from core.workspace_access_service import WorkspaceAccessService
+        self.projection = MirrorFilteredFSBackend(self.root, self.policy, self.runtime_root, workspace_access=WorkspaceAccessService(self.root, self.policy))
         self.runners = RunnerManager(self.root, self.projection, self.sessions, get_platform_adapter("Windows"))
         self.registry = AgentRegistry()
         self.events = EventBus()

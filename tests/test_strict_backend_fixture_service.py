@@ -16,6 +16,14 @@ class _FakeProjectionManager:
     def projection_root(self, session_id: str) -> Path:
         return self.root / session_id
 
+    @property
+    def mount_root(self):
+        return self.root / "sess-1234"
+
+    def mount(self, session_id):
+        from core.filtered_fs_backend import MountResult
+        return MountResult(mount_root=self.root / "sess-1234", session_id=session_id, policy_version=1)
+
 
 class _FakeSessionManager:
     current_session_id = "sess-1234"
@@ -56,7 +64,7 @@ class StrictBackendFixtureServiceTests(unittest.TestCase):
 
             service = StrictBackendFixtureService(
                 project_root=project_root,
-                projection_manager=_FakeProjectionManager(projection_root),
+                fs_backend=_FakeProjectionManager(projection_root),
                 session_manager=_FakeSessionManager(),
                 strict_backend_health_provider=lambda: StrictBackendHealth(
                     platform_name="windows",
@@ -86,7 +94,7 @@ class StrictBackendFixtureServiceTests(unittest.TestCase):
             base = Path(temp_dir)
             service = StrictBackendFixtureService(
                 project_root=base / "project",
-                projection_manager=_FakeProjectionManager(base / "runtime" / "projections"),
+                fs_backend=_FakeProjectionManager(base / "runtime" / "projections"),
                 session_manager=_FakeSessionManager(),
                 strict_backend_health_provider=lambda: StrictBackendHealth(
                     platform_name="windows",
@@ -137,7 +145,7 @@ class StrictBackendFixtureServiceTests(unittest.TestCase):
 
             service = StrictBackendFixtureService(
                 project_root=project_root,
-                projection_manager=_FakeProjectionManager(projection_root),
+                fs_backend=_FakeProjectionManager(projection_root),
                 session_manager=_FakeSessionManager(),
                 strict_backend_health_provider=lambda: StrictBackendHealth(
                     platform_name="linux",
@@ -192,7 +200,7 @@ class StrictBackendFixtureServiceTests(unittest.TestCase):
 
             service = StrictBackendFixtureService(
                 project_root=project_root,
-                projection_manager=_FakeProjectionManager(projection_root),
+                fs_backend=_FakeProjectionManager(projection_root),
                 session_manager=_FakeSessionManager(),
                 strict_backend_health_provider=lambda: StrictBackendHealth(
                     platform_name="linux",
@@ -243,7 +251,7 @@ class StrictBackendFixtureServiceTests(unittest.TestCase):
 
             service = StrictBackendFixtureService(
                 project_root=project_root,
-                projection_manager=_FakeProjectionManager(projection_root),
+                fs_backend=_FakeProjectionManager(projection_root),
                 session_manager=_FakeSessionManager(),
                 strict_backend_health_provider=lambda: StrictBackendHealth(
                     platform_name="windows",

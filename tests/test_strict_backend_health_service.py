@@ -16,6 +16,14 @@ class _FakeProjectionManager:
     def projection_root(self, session_id: str) -> Path:
         return self.root / session_id
 
+    @property
+    def mount_root(self):
+        return self.root / "sess-1234"
+
+    def mount(self, session_id):
+        from core.filtered_fs_backend import MountResult
+        return MountResult(mount_root=self.root / "sess-1234", session_id=session_id, policy_version=1)
+
 
 class _FakeSessionManager:
     current_session_id = "sess-1234"

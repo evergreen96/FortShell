@@ -13,7 +13,7 @@ from backend.strict_backend_validator import StrictBackendValidator
 class RunnerStrictService:
     def __init__(
         self,
-        projection_manager,
+        fs_backend,
         session_manager,
         platform_adapter,
         command_guard,
@@ -26,7 +26,7 @@ class RunnerStrictService:
         argv_to_command,
         strict_backend_validator=None,
     ) -> None:
-        self.projection_manager = projection_manager
+        self.fs_backend = fs_backend
         self.session_manager = session_manager
         self.platform_adapter = platform_adapter
         self.command_guard = command_guard
@@ -38,6 +38,10 @@ class RunnerStrictService:
         self._argv_to_command = argv_to_command
         self.strict_backend_validator = strict_backend_validator or StrictBackendValidator()
 
+    def _ensure_mount(self):
+        if self.fs_backend.mount_root is None:
+            self.fs_backend.mount(self.session_manager.current_session_id)
+
     def boundary_scope(self) -> str:
         return DEFAULT_STRICT_BOUNDARY_SCOPE
 
@@ -46,16 +50,17 @@ class RunnerStrictService:
         if not decision.allowed:
             return self._blocked_result_factory("strict", decision.reason)
 
-        manifest = self.projection_manager.materialize(self.session_manager.current_session_id)
-        strict_env = self._strict_backend_environment(manifest.root)
+        self._ensure_mount()
+        projected_root = self.fs_backend.mount_root
+        strict_env = self._strict_backend_environment(projected_root)
         invocation = self.platform_adapter.strict_backend_invocation(
             command,
-            manifest.root,
+            projected_root,
             env=strict_env,
         )
         launch_failure_notice = ""
         if invocation is not None:
-            validation = self.strict_backend_validator.validate(invocation, projected_root=manifest.root)
+            validation = self.strict_backend_validator.validate(invocation, projected_root=projected_root)
             if not validation.valid:
                 launch_failure_notice = (
                     f"backend validation failed ({invocation.backend}): {validation.reason}"
@@ -80,7 +85,7 @@ class RunnerStrictService:
 
         result = self._run_subprocess(
             command,
-            manifest.root,
+            projected_root,
             mode="strict",
             backend="strict-preview",
             env=self._build_strict_environment(),
@@ -93,17 +98,18 @@ class RunnerStrictService:
         if not decision.allowed:
             return self._blocked_result_factory("strict", decision.reason)
 
-        manifest = self.projection_manager.materialize(self.session_manager.current_session_id)
-        strict_env = self._strict_backend_environment(manifest.root, env)
+        self._ensure_mount()
+        projected_root = self.fs_backend.mount_root
+        strict_env = self._strict_backend_environment(projected_root, env)
         invocation = self.platform_adapter.strict_backend_invocation(
             command,
-            manifest.root,
+            projected_root,
             env=strict_env,
             argv=argv,
         )
         launch_failure_notice = ""
         if invocation is not None:
-            validation = self.strict_backend_validator.validate(invocation, projected_root=manifest.root)
+            validation = self.strict_backend_validator.validate(invocation, projected_root=projected_root)
             if not validation.valid:
                 launch_failure_notice = (
                     f"backend validation failed ({invocation.backend}): {validation.reason}"
@@ -128,7 +134,7 @@ class RunnerStrictService:
 
         result = self._run_subprocess(
             argv,
-            manifest.root,
+            projected_root,
             mode="strict",
             backend="strict-preview",
             env=self._merge_environment(self._build_strict_environment(), env),
@@ -142,13 +148,14 @@ class RunnerStrictService:
         if not decision.allowed:
             return self._blocked_launch_result("strict", decision.reason)
 
-        manifest = self.projection_manager.materialize(self.session_manager.current_session_id)
-        artifact_root = self.projection_manager.internal_runtime_dir / "processes"
+        self._ensure_mount()
+        projected_root = self.fs_backend.mount_root
+        artifact_root = self.fs_backend.internal_runtime_dir / "processes"
         control = self._control_for_backend("restricted-host-helper", artifact_root)
-        strict_env = self._strict_backend_environment(manifest.root, env)
+        strict_env = self._strict_backend_environment(projected_root, env)
         invocation = self.platform_adapter.strict_backend_invocation(
             command,
-            manifest.root,
+            projected_root,
             env=strict_env,
             process_mode=True,
             argv=argv,
@@ -157,7 +164,7 @@ class RunnerStrictService:
         )
         launch_failure_notice = ""
         if invocation is not None:
-            validation = self.strict_backend_validator.validate(invocation, projected_root=manifest.root)
+            validation = self.strict_backend_validator.validate(invocation, projected_root=projected_root)
             if not validation.valid:
                 launch_failure_notice = (
                     f"backend validation failed ({invocation.backend}): {validation.reason}"
@@ -188,7 +195,7 @@ class RunnerStrictService:
 
         handle = self._start_subprocess(
             argv,
-            manifest.root,
+            projected_root,
             mode="strict",
             backend="strict-preview",
             env=self._merge_environment(self._build_strict_environment(), env),
@@ -215,11 +222,11 @@ class RunnerStrictService:
     ) -> dict[str, str]:
         merged = dict(env or {})
         source_project_root = getattr(
-            self.projection_manager,
+            self.fs_backend,
             "project_root",
-            getattr(self.projection_manager, "root", projected_root),
+            getattr(self.fs_backend, "root", projected_root),
         )
-        runtime_root = self.projection_manager.internal_runtime_dir.resolve()
+        runtime_root = self.fs_backend.internal_runtime_dir.resolve()
         runtime_controls = (runtime_root / "controls").resolve()
         runtime_processes = (runtime_root / "processes").resolve()
         runtime_controls.mkdir(parents=True, exist_ok=True)

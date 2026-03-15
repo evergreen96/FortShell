@@ -12,7 +12,7 @@ from unittest.mock import patch
 
 from backend.windows.platforms import StrictSandboxProbe, get_platform_adapter
 from core.policy import PolicyEngine
-from backend.projection import ProjectedWorkspaceManager
+from backend.filtered_fs_factory import MirrorFilteredFSBackend
 from backend.runner import RunnerManager, RunnerResult, _build_strict_environment
 from backend.session import SessionManager
 from backend.strict_backend_validator import StrictBackendValidationResult
@@ -83,7 +83,8 @@ class RunnerManagerTests(unittest.TestCase):
         self.policy.add_deny_rule("secrets/**")
         self.sessions = SessionManager(self.policy)
         self.sessions.ensure_fresh_execution_session()
-        self.projection = ProjectedWorkspaceManager(self.root, self.policy, self.runtime_root)
+        from core.workspace_access_service import WorkspaceAccessService
+        self.projection = MirrorFilteredFSBackend(self.root, self.policy, self.runtime_root, workspace_access=WorkspaceAccessService(self.root, self.policy))
         self.runners = RunnerManager(self.root, self.projection, self.sessions, get_platform_adapter("Windows"))
 
     def tearDown(self) -> None:

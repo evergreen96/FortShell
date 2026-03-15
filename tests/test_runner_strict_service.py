@@ -33,6 +33,14 @@ class _FakeProjectionManager:
     def materialize(self, session_id: str):
         return type("Manifest", (), {"root": self.root / session_id})()
 
+    @property
+    def mount_root(self):
+        return self.root
+
+    def mount(self, session_id):
+        from core.filtered_fs_backend import MountResult
+        return MountResult(mount_root=self.root, session_id=session_id, policy_version=1)
+
 
 class _FakeSessionManager:
     current_session_id = "sess-1234"

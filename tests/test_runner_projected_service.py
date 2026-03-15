@@ -32,6 +32,14 @@ class _FakeProjectionManager:
         self.materialize_calls.append(session_id)
         return type("Manifest", (), {"root": self.root / session_id})()
 
+    @property
+    def mount_root(self):
+        return self.root
+
+    def mount(self, session_id):
+        from core.filtered_fs_backend import MountResult
+        return MountResult(mount_root=self.root, session_id=session_id, policy_version=1)
+
 
 class _FakeSessionManager:
     current_session_id = "sess-1234"
@@ -96,9 +104,8 @@ class RunnerProjectedServiceTests(unittest.TestCase):
             result = service.run("ls")
 
         self.assertEqual("projected", result.mode)
-        self.assertEqual(["sess-1234"], projection_manager.materialize_calls)
+        self.assertEqual(projection_manager.mount_root, captured["working_directory"])
         self.assertEqual("ls", captured["command"])
-        self.assertEqual(root / "sess-1234", captured["working_directory"])
 
     def test_run_process_passes_environment_overlay_to_subprocess(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

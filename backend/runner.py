@@ -51,13 +51,13 @@ class HostRunner:
 class ProjectedRunner:
     def __init__(
         self,
-        projection_manager: FilteredFSBackend,
+        fs_backend: FilteredFSBackend,
         session_manager: SessionManager,
         platform_adapter: PlatformAdapter,
         command_guard: CommandGuard,
     ) -> None:
         self.projected_service = RunnerProjectedService(
-            projection_manager,
+            fs_backend,
             session_manager,
             command_guard,
             run_subprocess=lambda *args, **kwargs: _run_subprocess(*args, **kwargs),
@@ -86,13 +86,13 @@ class ProjectedRunner:
 class StrictRunner:
     def __init__(
         self,
-        projection_manager: FilteredFSBackend,
+        fs_backend: FilteredFSBackend,
         session_manager: SessionManager,
         platform_adapter: PlatformAdapter,
         command_guard: CommandGuard,
     ) -> None:
         self.strict_service = RunnerStrictService(
-            projection_manager,
+            fs_backend,
             session_manager,
             platform_adapter,
             command_guard,
@@ -118,40 +118,40 @@ class RunnerManager:
     def __init__(
         self,
         project_root: Path,
-        projection_manager: FilteredFSBackend,
+        fs_backend: FilteredFSBackend,
         session_manager: SessionManager,
         platform_adapter: PlatformAdapter,
         *,
         workspace_signature_provider=None,
     ) -> None:
         self.project_root = project_root.resolve()
-        self.projection_manager = projection_manager
+        self.fs_backend = fs_backend
         self.session_manager = session_manager
         self.platform_adapter = platform_adapter
         self.mode = "projected"
         self.command_guard = CommandGuard(self.project_root)
         self.host_runner = HostRunner(self.project_root)
         self.projected_runner = ProjectedRunner(
-            projection_manager=self.projection_manager,
+            fs_backend=self.fs_backend,
             session_manager=self.session_manager,
             platform_adapter=self.platform_adapter,
             command_guard=self.command_guard,
         )
         self.strict_runner = StrictRunner(
-            projection_manager=self.projection_manager,
+            fs_backend=self.fs_backend,
             session_manager=self.session_manager,
             platform_adapter=self.platform_adapter,
             command_guard=self.command_guard,
         )
         self.strict_backend_health = StrictBackendHealthService(
             self.platform_adapter,
-            self.projection_manager,
+            self.fs_backend,
             self.session_manager,
             self.strict_runner.strict_service.strict_backend_validator,
         )
         self.workspace_index_builder = WorkspaceIndexSnapshotBuilder(
             self.project_root,
-            self.projection_manager.workspace_access,
+            self.fs_backend.workspace_access,
         )
         self.workspace_signature_provider = (
             workspace_signature_provider or self.workspace_index_builder.build_signature
@@ -167,7 +167,7 @@ class RunnerManager:
         )
         self.strict_backend_fixture = StrictBackendFixtureService(
             project_root=self.project_root,
-            projection_manager=self.projection_manager,
+            fs_backend=self.fs_backend,
             session_manager=self.session_manager,
             strict_backend_health_provider=self.strict_backend_health.health,
             strict_runner_run=self.strict_runner.run,

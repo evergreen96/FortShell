@@ -77,7 +77,7 @@ class StrictBackendFixtureService:
         self,
         *,
         project_root: Path,
-        projection_manager,
+        fs_backend,
         session_manager,
         strict_backend_health_provider,
         strict_runner_run,
@@ -89,7 +89,7 @@ class StrictBackendFixtureService:
         ),
     ) -> None:
         self.project_root = project_root.resolve()
-        self.projection_manager = projection_manager
+        self.fs_backend = fs_backend
         self.session_manager = session_manager
         self.strict_backend_health_provider = strict_backend_health_provider
         self.strict_runner_run = strict_runner_run
@@ -110,8 +110,10 @@ class StrictBackendFixtureService:
                 stderr="",
             )
 
-        projection_root = self.projection_manager.projection_root(self.session_manager.current_session_id)
-        fixture_path = projection_root / self._FIXTURE_FILENAME
+        mount = self.fs_backend.mount_root
+        if mount is None:
+            mount = self.fs_backend.mount(self.session_manager.current_session_id).mount_root
+        fixture_path = mount / self._FIXTURE_FILENAME
         fixture_paths = self._prepare_fixture_paths(health.backend)
         if fixture_path.exists():
             fixture_path.unlink()

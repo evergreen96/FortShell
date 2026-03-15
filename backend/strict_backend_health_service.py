@@ -23,12 +23,12 @@ class StrictBackendHealthService:
     def __init__(
         self,
         platform_adapter: PlatformAdapter,
-        projection_manager,
+        fs_backend,
         session_manager,
         strict_backend_validator: StrictBackendValidator,
     ) -> None:
         self.platform_adapter = platform_adapter
-        self.projection_manager = projection_manager
+        self.fs_backend = fs_backend
         self.session_manager = session_manager
         self.strict_backend_validator = strict_backend_validator
 
@@ -47,7 +47,9 @@ class StrictBackendHealthService:
                 ready=False,
             )
 
-        projected_root = self.projection_manager.projection_root(self.session_manager.current_session_id)
+        projected_root = self.fs_backend.mount_root
+        if projected_root is None:
+            projected_root = self.fs_backend.mount(self.session_manager.current_session_id).mount_root
         invocation = self.platform_adapter.strict_backend_invocation("true", projected_root)
         if invocation is None:
             return StrictBackendHealth(
