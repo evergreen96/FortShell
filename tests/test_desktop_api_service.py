@@ -55,7 +55,7 @@ class TestDesktopApiService(unittest.TestCase):
         result = self.service.terminal_create(name="test", transport="host", io_mode="pty")
         self.assertEqual(result["kind"], "terminal_create")
         self.app.create_terminal.assert_called_once_with(
-            name="test", transport="host", runner_mode=None, io_mode="pty",
+            name="test", transport="host", runner_mode=None, io_mode="pty", profile_id=None,
         )
 
     def test_terminal_run_delegates(self) -> None:

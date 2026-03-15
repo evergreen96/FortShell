@@ -115,6 +115,7 @@ class SidecarDispatcher:
                 transport=params.get("transport", "runner"),
                 runner_mode=params.get("runner_mode"),
                 io_mode=params.get("io_mode", "command"),
+                profile_id=params.get("profile_id"),
             )
 
         if method == "terminal.run":

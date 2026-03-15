@@ -69,6 +69,7 @@ class TestSidecarDispatcher(unittest.TestCase):
             transport="host",
             runner_mode=None,
             io_mode="pty",
+            profile_id=None,
         )
 
     def test_terminal_run(self) -> None:

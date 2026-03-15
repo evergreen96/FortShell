@@ -39,4 +39,9 @@ class DesktopShellService:
                 "active_terminal_id": active_terminal["terminal_id"] if active_terminal is not None else None,
                 "items": terminal_payloads,
             },
+            "terminal_profiles": {
+                "items": self.app.list_terminal_profiles(),
+                "default_profile_id": self.app.terminal_profiles.default_profile_id(),
+                "config_path": str(self.app.terminal_profiles.config_path),
+            },
         }

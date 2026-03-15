@@ -43,3 +43,4 @@ prototypes/filtered_fs/**/cache/
 prototypes/filtered_fs/**/*.stdout.log
 prototypes/filtered_fs/**/*.stderr.log
 prototypes/filtered_fs/**/*.pid
+prototypes/filtered_fs/pyprojfs/

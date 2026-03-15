@@ -106,12 +106,14 @@ class DesktopApiService:
         transport: str = "runner",
         runner_mode: str | None = None,
         io_mode: str = "command",
+        profile_id: str | None = None,
     ) -> dict[str, Any]:
         terminal = self.app.create_terminal(
             name=name,
             transport=transport,
             runner_mode=runner_mode,
             io_mode=io_mode,
+            profile_id=profile_id,
         )
         inspection = self.app.inspect_terminal(terminal.terminal_id)
         return {

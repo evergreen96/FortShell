@@ -14,6 +14,7 @@ from backend.pty_session import PtySessionConfig, PtySessionManager, pty_availab
 from backend.terminal_command_executor import TerminalCommandExecutor
 from backend.terminal_inbox import render_terminal_inbox_entries, terminal_message_inbox_entry
 from backend.terminal_inspection_service import TerminalInspectionService, TerminalSessionInspection
+from backend.terminal_profiles import TerminalProfileCatalog
 from backend.terminal_snapshots import TerminalInboxSnapshot, TerminalWatchSnapshot
 from backend.terminal_state_store import TerminalStateStore
 from backend.terminal_watch_manager import MAX_TERMINAL_EVENT_WATCHES, TerminalWatchManager
@@ -45,6 +46,7 @@ class TerminalManager:
         event_bus: EventBus | None = None,
         state_path: Path | None = None,
         filtered_fs_backend: "FilteredFSBackend" | None = None,
+        profile_catalog: TerminalProfileCatalog | None = None,
     ) -> None:
         self.project_root = project_root
         self.metrics = metrics
@@ -52,6 +54,7 @@ class TerminalManager:
         self.agent_runtime = agent_runtime
         self.event_bus = event_bus
         self.filtered_fs_backend = filtered_fs_backend
+        self.profile_catalog = profile_catalog
         self._lock = threading.RLock()
         self._set_terminal_state({})
         self.state_store = TerminalStateStore(state_path)
@@ -88,9 +91,15 @@ class TerminalManager:
         transport: str = "runner",
         runner_mode: Optional[str] = "projected",
         io_mode: str = "command",
+        profile_id: str | None = None,
     ) -> TerminalSession:
         if len(self.terminals) >= MAX_TERMINALS:
             raise ValueError(f"Too many terminals: {len(self.terminals)} >= {MAX_TERMINALS}")
+        profile = self.profile_catalog.get(profile_id) if profile_id and self.profile_catalog is not None else None
+        if profile is not None:
+            transport = profile.transport
+            runner_mode = profile.runner_mode
+            io_mode = profile.io_mode
         if transport not in {"runner", "host"}:
             raise ValueError("Terminal transport must be 'runner' or 'host'")
         if transport == "runner" and runner_mode not in {"projected", "strict"}:
@@ -109,10 +118,12 @@ class TerminalManager:
         terminal_id = f"term-{uuid.uuid4().hex[:6]}"
         session = TerminalSession(
             terminal_id=terminal_id,
-            name=name or terminal_id,
+            name=name or (profile.label if profile is not None else terminal_id),
             created_at=dt.datetime.utcnow().isoformat(timespec="seconds") + "Z",
             transport=transport,
             runner_mode=runner_mode,
+            profile_id=profile.profile_id if profile is not None else None,
+            profile_label=profile.label if profile is not None else None,
             status="active",
             stale_reason=None,
             execution_session_id=execution_session_id,
@@ -120,6 +131,10 @@ class TerminalManager:
             command_history=[],
             inbox=[],
             io_mode=io_mode,
+            spawn_argv=list(profile.spawn_argv) if profile is not None else [],
+            command_argv_prefix=list(profile.command_argv_prefix) if profile is not None else [],
+            env_overrides=dict(profile.env) if profile is not None else {},
+            cwd_mode=profile.cwd_mode if profile is not None else ("runner_mount" if transport == "runner" else "project"),
         )
         self._set_terminal(session)
 
@@ -129,25 +144,26 @@ class TerminalManager:
 
         self._persist_state()
         logger.info(
-            "terminal.created terminal_id=%s transport=%s runner_mode=%s io_mode=%s execution_session_id=%s",
+            "terminal.created terminal_id=%s transport=%s runner_mode=%s io_mode=%s execution_session_id=%s profile_id=%s",
             session.terminal_id,
             session.transport,
             session.runner_mode,
             session.io_mode,
             session.execution_session_id,
+            session.profile_id,
         )
         return session
 
     def _spawn_pty(self, session: TerminalSession) -> None:
         """Spawn a PTY process for the given terminal session."""
-        shell = _default_shell()
-        env: dict[str, str] = {}
+        argv = list(session.spawn_argv) or [_default_shell()]
+        env = dict(session.env_overrides)
         if os.name == "nt":
-            env["PYTHONUTF8"] = "1"
+            env.setdefault("PYTHONUTF8", "1")
         cwd = self._terminal_cwd(session)
         config = PtySessionConfig(
             terminal_id=session.terminal_id,
-            shell=shell,
+            argv=argv,
             cols=80,
             rows=24,
             cwd=cwd,
@@ -160,7 +176,9 @@ class TerminalManager:
             session.io_mode = "command"
 
     def _terminal_cwd(self, session: TerminalSession) -> Path:
-        if session.transport != "runner" or session.execution_session_id is None:
+        if session.cwd_mode != "runner_mount":
+            return self.project_root
+        if session.execution_session_id is None:
             return self.project_root
         if self.filtered_fs_backend is None:
             return self.project_root

@@ -47,6 +47,8 @@ class TerminalSessionInspection:
             "created_at": self.session.created_at,
             "transport": self.session.transport,
             "runner_mode": self.session.runner_mode,
+            "profile_id": self.session.profile_id,
+            "profile_label": self.session.profile_label,
             "status": self.session.status,
             "stale_reason": self.session.stale_reason,
             "execution_session_id": self.session.execution_session_id,

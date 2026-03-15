@@ -142,6 +142,8 @@ class TerminalStateStore:
             created_at=str(payload["created_at"]),
             transport=str(payload["transport"]),
             runner_mode=payload.get("runner_mode"),
+            profile_id=payload.get("profile_id"),
+            profile_label=payload.get("profile_label"),
             status=str(payload["status"]),
             stale_reason=payload.get("stale_reason"),
             execution_session_id=payload.get("execution_session_id"),
@@ -149,6 +151,13 @@ class TerminalStateStore:
             command_history=command_history,
             inbox=inbox,
             io_mode=io_mode,
+            spawn_argv=[str(item) for item in payload.get("spawn_argv", [])],
+            command_argv_prefix=[str(item) for item in payload.get("command_argv_prefix", [])],
+            env_overrides={
+                str(key): str(value)
+                for key, value in (payload.get("env_overrides") or {}).items()
+            } if isinstance(payload.get("env_overrides"), dict) else {},
+            cwd_mode=str(payload.get("cwd_mode", "project")),
         )
 
     @staticmethod

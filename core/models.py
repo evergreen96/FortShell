@@ -243,6 +243,12 @@ class TerminalSession:
     command_history: List[str]
     inbox: List[TerminalInboxEntry]
     io_mode: str = "command"
+    profile_id: Optional[str] = None
+    profile_label: Optional[str] = None
+    spawn_argv: List[str] = field(default_factory=list)
+    command_argv_prefix: List[str] = field(default_factory=list)
+    env_overrides: dict[str, str] = field(default_factory=dict)
+    cwd_mode: str = "project"
     _state_lock: RLock = field(default_factory=RLock, init=False, repr=False, compare=False)
     _command_history_lock: RLock = field(default_factory=RLock, init=False, repr=False, compare=False)
     _inbox_lock: RLock = field(default_factory=RLock, init=False, repr=False, compare=False)

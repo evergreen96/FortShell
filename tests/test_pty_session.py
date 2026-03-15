@@ -22,7 +22,7 @@ class FakePtyBackend:
         self._rows = 24
         self._pid = 12345
 
-    def spawn(self, shell: str, cols: int, rows: int, cwd: str, env: dict[str, str]) -> None:
+    def spawn(self, argv: list[str], cols: int, rows: int, cwd: str, env: dict[str, str]) -> None:
         self._cols = cols
         self._rows = rows
 
@@ -54,7 +54,7 @@ class TestPtySessionManagerLifecycle(unittest.TestCase):
     def _make_config(self, terminal_id: str = "term-abc123") -> PtySessionConfig:
         return PtySessionConfig(
             terminal_id=terminal_id,
-            shell="cmd.exe",
+            argv=["cmd.exe"],
             cols=80,
             rows=24,
             cwd=Path(tempfile.gettempdir()),

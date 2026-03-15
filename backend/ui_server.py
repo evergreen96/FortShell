@@ -189,6 +189,7 @@ def build_handler(app: "AIIdeApp"):
                 transport = payload.get("transport", "runner")
                 runner_mode = payload.get("runner_mode")
                 io_mode = payload.get("io_mode", "command")
+                profile_id = payload.get("profile_id")
                 if name is not None and not isinstance(name, str):
                     self._send_json({"error": "Expected 'name' to be a string"}, status=HTTPStatus.BAD_REQUEST)
                     return
@@ -201,12 +202,16 @@ def build_handler(app: "AIIdeApp"):
                 if not isinstance(io_mode, str):
                     self._send_json({"error": "Expected 'io_mode' to be a string"}, status=HTTPStatus.BAD_REQUEST)
                     return
+                if profile_id is not None and not isinstance(profile_id, str):
+                    self._send_json({"error": "Expected 'profile_id' to be a string"}, status=HTTPStatus.BAD_REQUEST)
+                    return
                 try:
                     self._send_json(api.terminal_create(
                         name=name or None,
                         transport=transport,
                         runner_mode=runner_mode,
                         io_mode=io_mode,
+                        profile_id=profile_id or None,
                     ))
                 except (PermissionError, ValueError, RuntimeError) as exc:
                     self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)

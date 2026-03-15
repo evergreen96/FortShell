@@ -79,7 +79,7 @@ class UiServerTests(unittest.TestCase):
                     payload = json.loads(response.read().decode("utf-8"))
 
                 self.assertEqual("desktop_shell", payload["kind"])
-                self.assertEqual({"kind", "target", "workspace_panel", "terminals"}, set(payload))
+                self.assertEqual({"kind", "target", "workspace_panel", "terminals", "terminal_profiles"}, set(payload))
                 self.assertEqual("workspace_panel", payload["workspace_panel"]["kind"])
                 self.assertEqual(1, payload["terminals"]["count"])
                 self.assertEqual("managed-shell-1", payload["terminals"]["items"][0]["name"])

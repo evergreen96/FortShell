@@ -91,7 +91,7 @@ class TerminalCommandExecutor:
         )
 
     def _execute_host(self, session: TerminalSession, command: str) -> str:
-        shell_argv = self._host_shell_argv(command)
+        shell_argv = self._host_shell_argv(session, command)
         proc = subprocess.run(
             shell_argv,
             cwd=self.project_root,
@@ -116,7 +116,9 @@ class TerminalCommandExecutor:
         return f"[transport=host mode=host backend=host code={proc.returncode} unsafe=true]\n{output}"
 
     @staticmethod
-    def _host_shell_argv(command: str) -> list[str]:
+    def _host_shell_argv(session: TerminalSession, command: str) -> list[str]:
+        if session.command_argv_prefix:
+            return [*session.command_argv_prefix, command]
         comspec = os.environ.get("ComSpec") or "cmd.exe"
         # Use an explicit shell executable rather than shell=True so the host path
         # is stable and not delegated through Python's shell resolution.

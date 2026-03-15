@@ -15,7 +15,7 @@ from typing import Protocol
 class PtyBackend(Protocol):
     """Common protocol for PTY backends across platforms."""
 
-    def spawn(self, shell: str, cols: int, rows: int, cwd: str, env: dict[str, str]) -> None: ...
+    def spawn(self, argv: list[str], cols: int, rows: int, cwd: str, env: dict[str, str]) -> None: ...
     def read(self, size: int = 4096) -> bytes: ...
     def write(self, data: bytes) -> None: ...
     def resize(self, cols: int, rows: int) -> None: ...
@@ -32,7 +32,9 @@ class UnixPtyBackend:
         self._slave_fd: int | None = None
         self._process: subprocess.Popen | None = None
 
-    def spawn(self, shell: str, cols: int, rows: int, cwd: str, env: dict[str, str]) -> None:
+    def spawn(self, argv: list[str], cols: int, rows: int, cwd: str, env: dict[str, str]) -> None:
+        if not argv:
+            raise ValueError("PTY spawn argv must not be empty")
         master_fd, slave_fd = pty.openpty()
         # Set initial terminal size
         winsize = struct.pack("HHHH", rows, cols, 0, 0)
@@ -43,7 +45,7 @@ class UnixPtyBackend:
         merged_env["TERM"] = merged_env.get("TERM", "xterm-256color")
 
         self._process = subprocess.Popen(
-            [shell],
+            argv,
             stdin=slave_fd,
             stdout=slave_fd,
             stderr=slave_fd,

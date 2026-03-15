@@ -41,6 +41,7 @@ from backend.rust_host_protocol import RustHostSnapshot
 from backend.runtime_status_service import RuntimeStatusService
 from backend.session import SessionManager
 from backend.terminal import TerminalManager
+from backend.terminal_profiles import TerminalProfileCatalog
 from core.workspace_access_service import WorkspaceAccessService
 from backend.workspace_catalog_service import WorkspaceCatalogService
 from backend.workspace_index_freshness_service import WorkspaceIndexFreshnessService
@@ -131,6 +132,7 @@ class AIIdeApp:
             workspace_access=self.workspace_access,
         )
         self.review_events = ReviewEventPublisher(self.events)
+        self.terminal_profiles = TerminalProfileCatalog(self.runtime_root)
         self.filtered_fs = create_filtered_fs_backend(
             self.root,
             self.policy,
@@ -161,6 +163,7 @@ class AIIdeApp:
             event_bus=self.events,
             state_path=self.runtime_root / "terminals" / "state.json",
             filtered_fs_backend=self.filtered_fs,
+            profile_catalog=self.terminal_profiles,
         )
         self.terminals.mark_noncurrent_runner_terminals_stale(
             self.sessions.current_session_id,
@@ -439,15 +442,23 @@ class AIIdeApp:
         transport: str = "runner",
         runner_mode: str | None = None,
         io_mode: str = "command",
+        profile_id: str | None = None,
     ):
-        execution_session_id = self.sessions.current_session_id if transport == "runner" else None
+        resolved_transport = transport
+        if profile_id is not None:
+            resolved_transport = self.terminal_profiles.get(profile_id).transport
+        execution_session_id = self.sessions.current_session_id if resolved_transport == "runner" else None
         return self.terminals.create_terminal(
             name,
             execution_session_id=execution_session_id,
             transport=transport,
             runner_mode=runner_mode or self.runners.mode,
             io_mode=io_mode,
+            profile_id=profile_id,
         )
+
+    def list_terminal_profiles(self) -> list[dict[str, object]]:
+        return [profile.to_dict() for profile in self.terminal_profiles.list_profiles()]
 
     def write_to_pty(self, terminal_id: str, data: str) -> None:
         self.terminals.write_to_pty(terminal_id, data)

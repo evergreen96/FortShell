@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import subprocess
 
 logger = logging.getLogger(__name__)
 
@@ -27,9 +28,11 @@ class WindowsPtyBackend:
         self._process: PtyProcess | None = None
         self._pid: int | None = None
 
-    def spawn(self, shell: str, cols: int, rows: int, cwd: str, env: dict[str, str]) -> None:
+    def spawn(self, argv: list[str], cols: int, rows: int, cwd: str, env: dict[str, str]) -> None:
         if not _WINPTY_AVAILABLE:
             raise RuntimeError("pywinpty is not installed")
+        if not argv:
+            raise ValueError("PTY spawn argv must not be empty")
 
         merged_env = dict(os.environ)
         merged_env.update(env)
@@ -38,7 +41,7 @@ class WindowsPtyBackend:
         merged_env.setdefault("PYTHONUTF8", "1")
 
         self._process = PtyProcess.spawn(
-            shell,
+            subprocess.list2cmdline(argv),
             dimensions=(rows, cols),
             cwd=cwd,
             env=merged_env,

@@ -19,7 +19,7 @@ PTY_OUTPUT_BUFFER_MAX = 100_000  # Max bytes retained in ring buffer per PTY
 @dataclass
 class PtySessionConfig:
     terminal_id: str
-    shell: str
+    argv: list[str]
     cols: int
     rows: int
     cwd: Path
@@ -82,7 +82,7 @@ class PtySessionManager:
             raise RuntimeError("PTY support is not available on this platform")
 
         backend.spawn(
-            config.shell,
+            config.argv,
             config.cols,
             config.rows,
             str(config.cwd),
@@ -110,7 +110,7 @@ class PtySessionManager:
             "pty_session.created terminal_id=%s pid=%s shell=%s cols=%s rows=%s",
             config.terminal_id,
             pid,
-            config.shell,
+            " ".join(config.argv),
             config.cols,
             config.rows,
         )
