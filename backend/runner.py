@@ -16,7 +16,8 @@ from backend.runner_models import (
 )
 from backend.runner_process_service import RunnerProcessService
 from backend.runner_projected_service import RunnerProjectedService
-from backend.projection import ProjectedWorkspaceManager, ProjectionManifest
+from backend.projection import ProjectionManifest
+from core.filtered_fs_backend import FilteredFSBackend
 from backend.runner_status_service import RunnerStatusService
 from backend.strict_backend_fixture_service import StrictBackendFixtureService
 from backend.strict_backend_health_service import StrictBackendHealthService
@@ -50,7 +51,7 @@ class HostRunner:
 class ProjectedRunner:
     def __init__(
         self,
-        projection_manager: ProjectedWorkspaceManager,
+        projection_manager: FilteredFSBackend,
         session_manager: SessionManager,
         platform_adapter: PlatformAdapter,
         command_guard: CommandGuard,
@@ -85,7 +86,7 @@ class ProjectedRunner:
 class StrictRunner:
     def __init__(
         self,
-        projection_manager: ProjectedWorkspaceManager,
+        projection_manager: FilteredFSBackend,
         session_manager: SessionManager,
         platform_adapter: PlatformAdapter,
         command_guard: CommandGuard,
@@ -117,7 +118,7 @@ class RunnerManager:
     def __init__(
         self,
         project_root: Path,
-        projection_manager: ProjectedWorkspaceManager,
+        projection_manager: FilteredFSBackend,
         session_manager: SessionManager,
         platform_adapter: PlatformAdapter,
         *,
