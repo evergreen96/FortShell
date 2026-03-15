@@ -92,6 +92,18 @@ class FilteredFSBackend(ABC):
         """Original project root."""
         return self.project_root
 
+    # -- Optional lifecycle hooks (backends may override) --
+
+    def cleanup_stale(self, current_session_id: str) -> None:
+        """Clean up stale resources from previous sessions. No-op for live backends."""
+        pass
+
+    @property
+    def internal_runtime_dir(self) -> Path:
+        """Runtime directory for internal state. Default: project_root/.ai_ide_runtime."""
+        from core.internal import INTERNAL_RUNTIME_DIR_NAME
+        return self.project_root / INTERNAL_RUNTIME_DIR_NAME
+
     def is_protected(self, path: Path) -> bool:
         """Check if a path should be protected (access-denied).
 

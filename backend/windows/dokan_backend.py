@@ -72,7 +72,11 @@ class DokanFilteredOperations(Operations):
             )
         }
         if self._is_protected(real):
-            result["st_mode"] = 0  # ---------- (no permissions)
+            if real.is_dir():
+                # Directories: allow traversal (list contents) but not modification
+                result["st_mode"] = 0o40555  # dr-xr-xr-x (read+execute, no write)
+            else:
+                result["st_mode"] = 0  # ---------- (no permissions)
         return result
 
     def access(self, path, amode):

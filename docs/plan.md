@@ -74,17 +74,22 @@
 
 ## 새 계획
 
-### 1단계: core 인터페이스 확정 (OS 공통)
-- [ ] `FilteredFSBackend` 인터페이스를 protection 모델로 업데이트
-- [ ] backend 계약 테스트 정의 (readdir 포함, open EACCES, chmod EACCES 등)
-- [ ] PolicyEngine의 deny = protected 의미 정리
+### 1단계: core 인터페이스 확정 (OS 공통) ✅
+- [x] `FilteredFSBackend` 인터페이스를 protection 모델로 업데이트 (mount/unmount/status/is_protected)
+- [x] backend 계약 테스트 정의 (readdir 포함, open EACCES, chmod EACCES 등) — 15건
+- [x] `FilteredFSStatus`, `MountResult` 데이터 클래스 확정
+- [x] `filtered_fs_factory.py` + `MirrorFilteredFSBackend` fallback
 
-### 2단계: Windows backend 수정 (Dokan)
-- [ ] `dokan_backend.py` — readdir에 protected 파일 포함
-- [ ] `dokan_backend.py` — open/read/write → EACCES
-- [ ] `dokan_backend.py` — getattr → 권한 0 반환
-- [ ] `dokan_backend.py` — chmod/chown/rm → EACCES
-- [ ] Dokan E2E 테스트 업데이트
+### 2단계: Windows backend 수정 (Dokan) ✅
+- [x] `dokan_backend.py` — readdir에 protected 파일 포함
+- [x] `dokan_backend.py` — open/read/write → EACCES
+- [x] `dokan_backend.py` — getattr → 파일 권한 0, 폴더 dr-xr-xr-x
+- [x] `dokan_backend.py` — chmod/chown/rm/symlink/link → EACCES
+- [x] `dokan_driver_check.py` — 드라이버 감지 + 설치 안내
+- [x] `dokan_fs_backend.py` — mount lifecycle (새 인터페이스)
+- [x] Dokan E2E 테스트 (보호 모델 + 정책 즉시 반영) — 16건
+- [x] `filtered-fs` CLI 명령 + `filtered_fs_status()` API
+- [x] app.py startup 로그
 
 ### 3단계: UI 업데이트
 - [ ] 파일트리에서 "숨김" → "보호" 용어/아이콘 변경
