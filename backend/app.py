@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import logging
 import shlex
 from pathlib import Path
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 from backend.agents import AgentRegistry
 from backend.agent_runtime import AgentRuntimeManager
@@ -173,6 +176,14 @@ class AIIdeApp:
             )
             self.sync_rust_snapshot(self.rust_control.snapshot())
 
+        fs_status = self.filtered_fs.status()
+        logger.info(
+            "app.filtered_fs backend=%s driver_installed=%s degraded=%s",
+            fs_status.backend,
+            fs_status.driver_installed,
+            fs_status.degraded,
+        )
+
     def persist_policy(self) -> None:
         self.policy_store.save(self.policy.state)
 
@@ -244,6 +255,10 @@ class AIIdeApp:
 
         if command == "status":
             return self._status_json() if len(parts) >= 2 and parts[1] == "json" else self._status_text()
+
+        if command == "filtered-fs":
+            import json as _json
+            return _json.dumps(self.filtered_fs_status(), indent=2)
 
         if command == "policy":
             return handle_policy_command(self, parts)
@@ -482,6 +497,18 @@ class AIIdeApp:
             event_count=self.events.size(),
             pending_review_count=self.reviews.count_proposals(status="pending"),
         )
+
+    def filtered_fs_status(self) -> dict:
+        """Return filtered filesystem backend status as a dict."""
+        fs_status = self.filtered_fs.status()
+        return {
+            "backend": fs_status.backend,
+            "driver_installed": fs_status.driver_installed,
+            "mounted": fs_status.mounted,
+            "mount_point": fs_status.mount_point,
+            "degraded": fs_status.degraded,
+            "detail": fs_status.detail,
+        }
 
     def _metrics_snapshot(self):
         if self.rust_control is not None:

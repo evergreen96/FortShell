@@ -164,7 +164,11 @@ class TerminalManager:
             return self.project_root
         if self.filtered_fs_backend is None:
             return self.project_root
-        return self.filtered_fs_backend.materialize(session.execution_session_id).root
+        mount = self.filtered_fs_backend.mount_root
+        if mount is not None:
+            return mount
+        result = self.filtered_fs_backend.mount(session.execution_session_id)
+        return result.mount_root
 
     def write_to_pty(self, terminal_id: str, data: str) -> None:
         """Write data to a PTY terminal."""
