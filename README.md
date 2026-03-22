@@ -4,6 +4,8 @@ A terminal-first IDE for managing multiple AI CLI tools (Claude Code, Codex CLI,
 
 Protect sensitive files from AI agents — they can see the files exist, but can't read or write them. Enforced by the macOS kernel, not by the app. No admin privileges required.
 
+![FortShell Screenshot](assets/screenshot.png)
+
 ## Why?
 
 When you use AI coding assistants in a terminal, they can read and modify any file in your project. FortShell lets you **set boundaries**:
