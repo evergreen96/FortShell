@@ -1,0 +1,323 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+:root {
+  --bg-primary: #1e1e2e;
+  --bg-secondary: #181825;
+  --bg-surface: #313244;
+  --text-primary: #cdd6f4;
+  --text-secondary: #a6adc8;
+  --accent: #89b4fa;
+  --border: #45475a;
+}
+
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", sans-serif;
+  overflow: hidden;
+  height: 100vh;
+}
+
+#root {
+  height: 100vh;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px 8px 80px; /* left padding for macOS traffic lights */
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+  -webkit-app-region: drag;
+  user-select: none;
+  position: relative;
+  z-index: 10;
+  flex-shrink: 0;
+}
+
+.app-header h1 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.status-badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+}
+
+.app-body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.sidebar {
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border);
+  padding: 12px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.sidebar-resize-handle {
+  width: 4px;
+  cursor: col-resize;
+  background: transparent;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+
+.sidebar-resize-handle:hover {
+  background: var(--accent);
+}
+
+.terminal-area {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  position: relative;
+}
+
+/* Tab bar */
+.tab-bar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  -webkit-app-region: no-drag;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-secondary);
+  transition: background 0.15s;
+}
+
+.tab:hover {
+  background: var(--bg-surface);
+}
+
+.tab-active {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+.tab-label {
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab-close {
+  font-size: 14px;
+  line-height: 1;
+  opacity: 0.5;
+  cursor: pointer;
+}
+
+.tab-close:hover {
+  opacity: 1;
+}
+
+.tab-new-wrapper {
+  position: relative;
+  -webkit-app-region: no-drag;
+  z-index: 20;
+}
+
+.tab-new {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 12px;
+  padding: 4px 8px;
+  cursor: pointer;
+  border-radius: 4px;
+  -webkit-app-region: no-drag;
+}
+
+.tab-new:hover {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+/* Terminal pane */
+.terminal-pane {
+  border: 2px solid transparent;
+}
+
+.terminal-pane-active {
+  border-color: var(--accent);
+}
+
+/* Exited terminal tab */
+.tab-exited {
+  opacity: 0.5;
+}
+
+/* Stale policy — terminal needs restart */
+.tab-stale {
+  border: 1px solid #f9e2af;
+}
+
+.tab-stale-icon {
+  color: #f9e2af;
+  font-size: 14px;
+  cursor: pointer;
+  line-height: 1;
+  title: "Restart to apply policy";
+}
+
+.tab-stale-icon:hover {
+  color: #fab387;
+}
+
+/* Profile menu */
+.profile-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 0;
+  min-width: 160px;
+  z-index: 100;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.profile-menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  font-size: 12px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+.profile-menu-item:hover {
+  background: var(--accent);
+  color: var(--bg-primary);
+}
+
+/* Layout toggle */
+.layout-toggle {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 14px;
+  padding: 2px 8px;
+  cursor: pointer;
+  border-radius: 4px;
+  margin-left: 4px;
+}
+
+.layout-toggle:hover {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+/* Terminal workspace layouts */
+.terminal-workspace {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  overflow: auto;
+}
+
+.terminal-workspace-single {
+  flex-direction: column;
+}
+
+.terminal-workspace-horizontal {
+  flex-direction: column;
+}
+
+.terminal-workspace-vertical {
+  flex-direction: row;
+}
+
+.terminal-workspace-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-auto-rows: minmax(200px, 1fr);
+}
+
+.terminal-workspace-cell {
+  flex: 1;
+  min-width: 0;
+  min-height: 200px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  position: relative;
+}
+
+.terminal-workspace-grid .terminal-workspace-cell {
+  min-width: 0;
+  min-height: 0;
+}
+
+.terminal-workspace-cell-active {
+  border-color: var(--accent);
+}
+
+.terminal-workspace-empty {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+}
+
+/* Status bar */
+.status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 12px;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.status-bar-left,
+.status-bar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.status-protected {
+  color: var(--accent);
+}

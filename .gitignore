@@ -1,0 +1,32 @@
+node_modules/
+dist-main/
+dist-renderer/
+release/
+.vite/
+
+# Native build artifacts (source is tracked, binary is not)
+native/darwin/sandbox-wrapper
+!native/darwin/sandbox-wrapper.c
+
+# Test artifacts
+test-results/
+playwright-report/
+
+# Internal docs (not for public)
+docs/
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Claude
+.claude/
+
+# v1 artifacts
+.ai-ide/
+.ai_ide_runtime/
+.pytest_cache/
+.relay-state/
+.worktrees/
+_archive/
