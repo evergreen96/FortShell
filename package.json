@@ -46,7 +46,7 @@
       "target": "nsis"
     },
     "mac": {
-      "target": "dmg",
+      "target": "zip",
       "icon": "assets/icon.png",
       "category": "public.app-category.developer-tools",
       "darkModeSupport": true
