@@ -83,17 +83,13 @@ cc -o native/darwin/sandbox-wrapper native/darwin/sandbox-wrapper.c -Wall -O2
 npm run dev
 ```
 
-### Option 2: DMG Install (end users)
+### Option 2: Download (end users)
 
-Download the DMG from [GitHub Releases](https://github.com/your-username/fortshell/releases) — choose your architecture:
-
-| Mac type | File |
-|----------|------|
-| Apple Silicon (M1/M2/M3/M4) | `FortShell-2.0.0-arm64.dmg` |
-| Intel | `FortShell-2.0.0.dmg` |
+Download from [GitHub Releases](https://github.com/evergreen96/FortShell/releases).
 
 ```bash
-# 1. Open the DMG and drag FortShell to Applications
+# 1. Unzip and move to Applications
+unzip FortShell-*.zip -d /Applications
 
 # 2. Allow unsigned app (required once)
 xattr -cr /Applications/FortShell.app
@@ -103,13 +99,6 @@ open /Applications/FortShell.app
 ```
 
 Or via System Settings → Privacy & Security → "Open Anyway".
-
-### Build DMG Yourself
-
-```bash
-npm run package:mac       # Build for your Mac's architecture
-npm run package:mac:all   # Build for both Intel + Apple Silicon
-```
 
 ---
 
