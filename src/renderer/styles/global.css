@@ -196,11 +196,15 @@ body {
   color: #fab387;
 }
 
+.tab-new-wrapper {
+  position: relative;
+}
+
 /* Profile menu */
 .profile-menu {
   position: absolute;
   top: 100%;
-  left: 0;
+  right: 0;
   margin-top: 4px;
   background: var(--bg-surface);
   border: 1px solid var(--border);
