@@ -30,8 +30,8 @@ export function getSandboxedSpawnArgs(
   shell: string,
   enforcer: PolicyEnforcer
 ): { command: string; args: string[] } | null {
-  if ("getSandboxedSpawnArgs" in enforcer) {
-    return (enforcer as any).getSandboxedSpawnArgs(shell);
+  if (enforcer.getSandboxedSpawnArgs) {
+    return enforcer.getSandboxedSpawnArgs(shell);
   }
   return null;
 }

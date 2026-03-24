@@ -1,7 +1,6 @@
 import {
   writeFileSync,
   mkdtempSync,
-  realpathSync,
   existsSync,
   statSync,
   rmSync,
@@ -10,6 +9,7 @@ import { join } from "path";
 import { tmpdir } from "os";
 import path from "path";
 import type { PolicyEnforcer } from "../types";
+import { resolveRealPath } from "../../core/utils";
 
 /**
  * Resolve the path to the sandbox-wrapper binary.
@@ -59,24 +59,11 @@ export class DarwinSeatbeltEnforcer implements PolicyEnforcer {
   }
 
   async applyProtection(filePath: string): Promise<void> {
-    this.protectedFiles.add(this.resolveRealPath(filePath));
+    this.protectedFiles.add(resolveRealPath(filePath));
   }
 
   async removeProtection(filePath: string): Promise<void> {
-    this.protectedFiles.delete(this.resolveRealPath(filePath));
-  }
-
-  /**
-   * Resolve path to its real filesystem path (follows symlinks).
-   * Critical on macOS where /tmp → /private/tmp, etc.
-   */
-  private resolveRealPath(filePath: string): string {
-    const resolved = path.resolve(filePath);
-    try {
-      return realpathSync(resolved);
-    } catch {
-      return resolved;
-    }
+    this.protectedFiles.delete(resolveRealPath(filePath));
   }
 
   async cleanup(): Promise<void> {
