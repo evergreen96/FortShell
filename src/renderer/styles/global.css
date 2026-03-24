@@ -282,9 +282,7 @@ body {
 }
 
 .terminal-workspace-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  grid-auto-rows: minmax(200px, 1fr);
+  /* grid layout is set via inline styles for resizable columns/rows */
 }
 
 .terminal-workspace-cell {
@@ -317,6 +315,30 @@ body {
 
 .terminal-workspace-cell-active {
   border-color: var(--accent);
+}
+
+.terminal-resize-handle-vertical {
+  width: 4px;
+  cursor: col-resize;
+  background: var(--border);
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+
+.terminal-resize-handle-vertical:hover {
+  background: var(--accent);
+}
+
+.terminal-resize-handle-horizontal {
+  height: 4px;
+  cursor: row-resize;
+  background: var(--border);
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+
+.terminal-resize-handle-horizontal:hover {
+  background: var(--accent);
 }
 
 .terminal-workspace-empty {
