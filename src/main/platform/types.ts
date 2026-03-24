@@ -14,6 +14,8 @@ export interface PolicyEnforcer {
   isAvailable(): boolean;
   /** Clean up all applied protections (e.g., on app exit) */
   cleanup(): Promise<void>;
+  /** Get sandboxed spawn args for a shell (optional — not all platforms support this) */
+  getSandboxedSpawnArgs?(shell: string): { command: string; args: string[] } | null;
 }
 
 export interface RestrictedSpawner {
