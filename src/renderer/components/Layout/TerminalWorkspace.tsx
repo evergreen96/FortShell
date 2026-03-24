@@ -53,6 +53,21 @@ export function TerminalWorkspace({
   const isVertical = layoutMode === "vertical";
   const isGrid = layoutMode === "grid";
 
+  const gridRows = Math.ceil(terminals.length / 2);
+  const currentRowSizes = gridRowSizes.length === gridRows
+    ? gridRowSizes
+    : Array(gridRows).fill(1 / gridRows);
+
+  // Store cleanup functions for drag listeners
+  const cleanupRef = useRef<(() => void) | null>(null);
+
+  function cleanupDragListeners() {
+    if (cleanupRef.current) {
+      cleanupRef.current();
+      cleanupRef.current = null;
+    }
+  }
+
   function handleDragStart(e: React.MouseEvent, index: number) {
     e.preventDefault();
     const startPos = isVertical ? e.clientY : e.clientX;
@@ -83,10 +98,13 @@ export function TerminalWorkspace({
       dragRef.current = null;
       document.removeEventListener("mousemove", onMove);
       document.removeEventListener("mouseup", onUp);
+      cleanupRef.current = null;
     };
 
+    cleanupDragListeners();
     document.addEventListener("mousemove", onMove);
     document.addEventListener("mouseup", onUp);
+    cleanupRef.current = onUp;
   }
 
   function handleGridDragStart(e: React.MouseEvent, axis: "col" | "row", index: number = 0) {
@@ -126,16 +144,14 @@ export function TerminalWorkspace({
       gridDragRef.current = null;
       document.removeEventListener("mousemove", onMove);
       document.removeEventListener("mouseup", onUp);
+      cleanupRef.current = null;
     };
 
+    cleanupDragListeners();
     document.addEventListener("mousemove", onMove);
     document.addEventListener("mouseup", onUp);
+    cleanupRef.current = onUp;
   }
-
-  const gridRows = Math.ceil(terminals.length / 2);
-  const currentRowSizes = gridRowSizes.length === gridRows
-    ? gridRowSizes
-    : Array(gridRows).fill(1 / gridRows);
 
   if (isGrid) {
     const cols = 2;
