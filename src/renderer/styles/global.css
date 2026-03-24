@@ -132,6 +132,18 @@ body {
   white-space: nowrap;
 }
 
+.tab-label-input {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  font-size: 11px;
+  padding: 1px 4px;
+  width: 100px;
+  outline: none;
+  -webkit-app-region: no-drag;
+}
+
 .tab-close {
   font-size: 14px;
   line-height: 1;
@@ -282,6 +294,20 @@ body {
   overflow: hidden;
   border: 1px solid var(--border);
   position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.terminal-cell-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  padding: 2px 8px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .terminal-workspace-grid .terminal-workspace-cell {

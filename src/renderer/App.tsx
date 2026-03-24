@@ -34,6 +34,7 @@ export function App() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [profiles, setProfiles] = useState<ShellProfile[]>([]);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [editingTabId, setEditingTabId] = useState<string | null>(null);
   const [layoutMode, setLayoutMode] = useState<TerminalLayoutMode>("horizontal");
   const [workspacePath, setWorkspacePath] = useState<string | null>(null);
   const [protectedPaths, setProtectedPaths] = useState<Set<string>>(new Set());
@@ -297,7 +298,41 @@ export function App() {
                   &#x21bb;
                 </span>
               )}
-              <span className="tab-label">{t.name}</span>
+              {editingTabId === t.id ? (
+                <input
+                  className="tab-label-input"
+                  defaultValue={t.name}
+                  maxLength={50}
+                  autoFocus
+                  onBlur={(e) => {
+                    const newName = e.target.value.trim() || t.name;
+                    setTerminals((prev) =>
+                      prev.map((term) =>
+                        term.id === t.id ? { ...term, name: newName } : term
+                      )
+                    );
+                    setEditingTabId(null);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") e.currentTarget.blur();
+                    if (e.key === "Escape") {
+                      e.currentTarget.value = t.name;
+                      e.currentTarget.blur();
+                    }
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                />
+              ) : (
+                <span
+                  className="tab-label"
+                  onDoubleClick={(e) => {
+                    e.stopPropagation();
+                    setEditingTabId(t.id);
+                  }}
+                >
+                  {t.name}
+                </span>
+              )}
               <span
                 className="tab-close"
                 onClick={(e) => {
