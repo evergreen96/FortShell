@@ -62,10 +62,10 @@ export class PtyManager {
         console.log(`[pty] Sandboxed: ${id} → ${sandboxArgs.command}`);
       } catch (err) {
         console.warn(`[pty] Sandbox spawn failed, falling back to plain shell:`, err);
-        ptyProcess = nodePty.spawn(shell, [], baseOpts);
+        ptyProcess = nodePty.spawn(shell, ["-l"], baseOpts);
       }
     } else {
-      ptyProcess = nodePty.spawn(shell, [], baseOpts);
+      ptyProcess = nodePty.spawn(shell, ["-l"], baseOpts);
       console.log(`[pty] Created: ${id}`);
     }
 
