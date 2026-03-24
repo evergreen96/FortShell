@@ -55,6 +55,7 @@ export function TerminalWorkspace({
           className={`terminal-workspace-cell ${t.id === activeId ? "terminal-workspace-cell-active" : ""}`}
           onClick={() => onSelectTerminal(t.id)}
         >
+          <div className="terminal-cell-label">{t.name}</div>
           <TerminalPane terminalId={t.id} isActive={t.id === activeId} fontSize={fontSize} />
         </div>
       ))}
