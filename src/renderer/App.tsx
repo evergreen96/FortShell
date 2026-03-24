@@ -252,7 +252,7 @@ export function App() {
     if (terminals.length === 0 && profiles.length > 0 && workspacePath) {
       createTerminal();
     }
-  }, [profiles, workspacePath]);
+  }, [profiles, workspacePath, createTerminal]);
 
   const useSplitLayout = terminals.length > 1;
 
