@@ -1,15 +1,7 @@
 import fs from "fs";
 import path from "path";
 import type { PolicyEnforcer } from "../../platform/types";
-
-function resolveRealPath(filePath: string): string {
-  const resolved = path.resolve(filePath);
-  try {
-    return fs.realpathSync(resolved);
-  } catch {
-    return resolved;
-  }
-}
+import { resolveRealPath } from "../utils";
 
 export class PolicyEngine {
   private protectedPaths = new Set<string>();
@@ -39,26 +31,26 @@ export class PolicyEngine {
   async protect(filePath: string): Promise<boolean> {
     const normalized = resolveRealPath(filePath);
     if (this.protectedPaths.has(normalized)) return false;
-    this.protectedPaths.add(normalized);
-    this.save();
 
     if (this.enforcer?.isAvailable()) {
       await this.enforcer.applyProtection(normalized);
     }
 
+    this.protectedPaths.add(normalized);
+    this.save();
     return true;
   }
 
   async unprotect(filePath: string): Promise<boolean> {
     const normalized = resolveRealPath(filePath);
     if (!this.protectedPaths.has(normalized)) return false;
-    this.protectedPaths.delete(normalized);
-    this.save();
 
     if (this.enforcer?.isAvailable()) {
       await this.enforcer.removeProtection(normalized);
     }
 
+    this.protectedPaths.delete(normalized);
+    this.save();
     return true;
   }
 
