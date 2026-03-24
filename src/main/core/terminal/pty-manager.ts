@@ -46,7 +46,12 @@ export class PtyManager {
       cols,
       rows,
       cwd,
-      env: process.env as Record<string, string>,
+      env: {
+        ...process.env,
+        LANG: process.env.LANG || "en_US.UTF-8",
+        LC_ALL: process.env.LC_ALL || "en_US.UTF-8",
+        LC_CTYPE: process.env.LC_CTYPE || "en_US.UTF-8",
+      } as Record<string, string>,
     };
 
     // Try sandboxed spawn (macOS sandbox-exec, Linux Landlock)
