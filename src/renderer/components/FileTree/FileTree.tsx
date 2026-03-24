@@ -125,11 +125,11 @@ export function FileTree({
 
 function isPathProtected(filePath: string, protectedPaths: Set<string>): boolean {
   if (protectedPaths.has(filePath)) return true;
-  // Check if any protected path is a parent of this path
   for (const p of protectedPaths) {
+    // This file is inside a protected directory
     if (filePath.startsWith(p + "/")) return true;
-    // Also check the reverse — entry path could be the non-realpath version
-    if (p.startsWith(filePath + "/")) return false;
+    // This directory contains a protected file
+    if (p.startsWith(filePath + "/")) return true;
   }
   return false;
 }
