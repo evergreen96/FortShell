@@ -9,11 +9,16 @@ type TerminalPaneProps = {
   fontSize?: number;
 };
 
+type CachedTerminal = {
+  term: Terminal;
+  fitAddon: FitAddon;
+  opened: boolean;
+  unlisten: (() => void) | null;
+  resizeTimeout: ReturnType<typeof setTimeout> | null;
+};
+
 // Cache terminal instances so they survive re-renders and tab switches
-const terminalCache = new Map<
-  string,
-  { term: Terminal; fitAddon: FitAddon; opened: boolean }
->();
+const terminalCache = new Map<string, CachedTerminal>();
 
 export function TerminalPane({ terminalId, isActive, fontSize: fontSizeProp }: TerminalPaneProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -51,7 +56,7 @@ export function TerminalPane({ terminalId, isActive, fontSize: fontSizeProp }: T
       const fitAddon = new FitAddon();
       term.loadAddon(fitAddon);
 
-      cached = { term, fitAddon, opened: false };
+      cached = { term, fitAddon, opened: false, unlisten: null, resizeTimeout: null };
       terminalCache.set(terminalId, cached);
 
       // Wire input: xterm → main process → PTY
@@ -59,24 +64,22 @@ export function TerminalPane({ terminalId, isActive, fontSize: fontSizeProp }: T
         window.electronAPI.terminalWrite(terminalId, data);
       });
 
-      // Wire resize: xterm → main process → PTY
-      let resizeTimeout: ReturnType<typeof setTimeout>;
+      // Wire resize: xterm → main process → PTY (debounced)
+      const cachedRef = cached;
       term.onResize(({ cols, rows }) => {
-        clearTimeout(resizeTimeout);
-        resizeTimeout = setTimeout(() => {
+        if (cachedRef.resizeTimeout) clearTimeout(cachedRef.resizeTimeout);
+        cachedRef.resizeTimeout = setTimeout(() => {
+          cachedRef.resizeTimeout = null;
           window.electronAPI.terminalResize(terminalId, cols, rows);
         }, 150);
       });
 
       // Wire output: main process → xterm
-      const unlisten = window.electronAPI.onTerminalData((id, data) => {
+      cached.unlisten = window.electronAPI.onTerminalData((id, data) => {
         if (id === terminalId) {
           term.write(data);
         }
       });
-
-      // Store unlisten for cleanup
-      (cached as any)._unlisten = unlisten;
     }
 
     // Open terminal in DOM (only once)
@@ -137,9 +140,8 @@ export function TerminalPane({ terminalId, isActive, fontSize: fontSizeProp }: T
 export function destroyTerminalCache(terminalId: string): void {
   const cached = terminalCache.get(terminalId);
   if (cached) {
-    if ((cached as any)._unlisten) {
-      (cached as any)._unlisten();
-    }
+    if (cached.unlisten) cached.unlisten();
+    if (cached.resizeTimeout) clearTimeout(cached.resizeTimeout);
     cached.term.dispose();
     terminalCache.delete(terminalId);
   }
