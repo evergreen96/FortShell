@@ -4,6 +4,13 @@
   align-items: center;
   justify-content: center;
   background: var(--bg-primary);
+  -webkit-app-region: drag;
+}
+
+.welcome-content button,
+.welcome-content a,
+.welcome-content ul {
+  -webkit-app-region: no-drag;
 }
 
 .welcome-content {

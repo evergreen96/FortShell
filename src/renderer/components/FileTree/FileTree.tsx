@@ -40,10 +40,6 @@ export function FileTree({
 
   useEffect(() => {
     refreshTree();
-  }, [refreshTree]);
-
-  // Auto-refresh on file system changes
-  useEffect(() => {
     if (!rootPath) return;
     const unlisten = window.electronAPI.onWorkspaceChanged(() => {
       refreshTree();
