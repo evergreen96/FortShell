@@ -44,7 +44,7 @@ export function TerminalPane({ terminalId, isActive, fontSize: fontSizeProp }: T
       const term = new Terminal({
         cursorBlink: true,
         fontSize,
-        fontFamily: "'Cascadia Code', 'Consolas', 'Courier New', monospace",
+        fontFamily: "'SF Mono', Menlo, Monaco, 'Cascadia Code', Consolas, 'D2Coding', 'Noto Sans Mono CJK KR', 'Apple SD Gothic Neo', 'Malgun Gothic', monospace",
         theme: {
           background: bg,
           foreground: fg,
