@@ -70,14 +70,14 @@ export function registerIpcHandlers(
     });
     if (result.canceled || result.filePaths.length === 0) return null;
     const dirPath = result.filePaths[0];
-    policyEngine.setProjectRoot(dirPath);
+    await policyEngine.setProjectRoot(dirPath);
     fileWatcher.watch(dirPath);
     addRecentWorkspace(dirPath);
     return dirPath;
   });
 
-  safeHandle("workspace:set-root", (_event, dirPath: string) => {
-    policyEngine.setProjectRoot(dirPath);
+  safeHandle("workspace:set-root", async (_event, dirPath: string) => {
+    await policyEngine.setProjectRoot(dirPath);
     fileWatcher.watch(dirPath);
     addRecentWorkspace(dirPath);
     return dirPath;

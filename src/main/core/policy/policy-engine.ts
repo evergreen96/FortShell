@@ -1,31 +1,47 @@
-import fs from "fs";
 import path from "path";
 import type { PolicyEnforcer } from "../../platform/types";
 import { resolveRealPath } from "../utils";
+import { loadWorkspacePolicy, saveWorkspacePolicy } from "../config/policy-store";
+
+type PolicyEngineOptions = {
+  policyStoreDir?: string;
+};
 
 export class PolicyEngine {
   private protectedPaths = new Set<string>();
   private projectRoot: string | null = null;
   private enforcer: PolicyEnforcer | null = null;
+  private readonly policyStoreDir?: string;
+
+  constructor(options: PolicyEngineOptions = {}) {
+    this.policyStoreDir = options.policyStoreDir;
+  }
 
   setEnforcer(enforcer: PolicyEnforcer): void {
     this.enforcer = enforcer;
   }
 
-  setProjectRoot(root: string): void {
-    this.projectRoot = root;
-    this.load();
-    // Re-apply enforcement for loaded paths
+  async setProjectRoot(root: string): Promise<void> {
     if (this.enforcer?.isAvailable()) {
-      for (const p of this.protectedPaths) {
-        this.enforcer.applyProtection(p).catch(() => {});
+      try {
+        await this.enforcer.cleanup();
+      } catch (err) {
+        console.warn(`[policy] Failed to reset previous policy state:`, err);
       }
     }
-  }
 
-  private get policyFilePath(): string | null {
-    if (!this.projectRoot) return null;
-    return path.join(this.projectRoot, ".fortshell", "policy.json");
+    this.projectRoot = resolveRealPath(root);
+    this.load();
+
+    if (this.enforcer?.isAvailable()) {
+      for (const p of this.protectedPaths) {
+        try {
+          await this.enforcer.applyProtection(p);
+        } catch (err) {
+          console.warn(`[policy] Failed to re-apply protection for ${p}:`, err);
+        }
+      }
+    }
   }
 
   async protect(filePath: string): Promise<boolean> {
@@ -74,39 +90,26 @@ export class PolicyEngine {
   }
 
   private save(): void {
-    const filePath = this.policyFilePath;
-    if (!filePath) return;
+    if (!this.projectRoot) return;
 
     try {
-      const dir = path.dirname(filePath);
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-      }
-
-      const data = {
-        version: 1,
-        protected: Array.from(this.protectedPaths),
-      };
-      fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf-8");
+      saveWorkspacePolicy(this.projectRoot, this.protectedPaths, this.policyStoreDir);
     } catch (err) {
       console.error(`[policy] Failed to save policy:`, err);
     }
   }
 
   private load(): void {
-    const filePath = this.policyFilePath;
-    if (!filePath || !fs.existsSync(filePath)) return;
+    this.protectedPaths = new Set();
+    if (!this.projectRoot) return;
 
     try {
-      const raw = fs.readFileSync(filePath, "utf-8");
-      const data = JSON.parse(raw);
-      if (Array.isArray(data.protected)) {
-        this.protectedPaths = new Set(
-          data.protected.map((p: string) => resolveRealPath(p))
-        );
-      }
+      this.protectedPaths = loadWorkspacePolicy(
+        this.projectRoot,
+        this.policyStoreDir
+      );
     } catch (err) {
-      console.warn(`[policy] Failed to load policy from ${filePath}:`, err);
+      console.warn(`[policy] Failed to load policy:`, err);
     }
   }
 }

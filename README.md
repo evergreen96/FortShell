@@ -34,6 +34,7 @@ PermissionError: [Errno 1] Operation not permitted: '.env'
 ### File Protection
 - **Kernel-level enforcement** — enforced by the OS, not the app
 - **Per-file or per-folder** — protect individual files or entire directories
+- **User-local policy storage** — protection rules live in FortShell app data, not in your repo
 - **Transparent to the user** — protected files show a lock icon in the file tree
 - **Cannot be bypassed** by the sandboxed process — not even with python, node, or symlinks
 

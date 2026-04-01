@@ -15,7 +15,7 @@ playwright-report/
 # Internal docs (not for public)
 docs/
 
-# FortShell policy (per-project, user-specific)
+# Legacy FortShell policy files (pre-userData migration)
 .fortshell/
 
 # OS
