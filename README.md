@@ -4,7 +4,15 @@ A terminal-first IDE for managing multiple AI CLI tools (Claude Code, Codex CLI,
 
 Protect sensitive files from AI agents — they can see the files exist, but can't read or write them. Enforced by the macOS kernel, not by the app. No admin privileges required.
 
-![FortShell Screenshot](assets/screenshot.png)
+## Screenshots
+
+### Explorer Workspace
+
+![FortShell Explorer Workspace](assets/screenshot.png)
+
+### Protection Center
+
+![FortShell Protection Center](assets/protection-center.png)
 
 ## Why?
 
@@ -36,6 +44,7 @@ PermissionError: [Errno 1] Operation not permitted: '.env'
 - **Per-file or per-folder** — protect individual files or entire directories
 - **User-local policy storage** — protection rules live in FortShell app data, not in your repo
 - **Transparent to the user** — protected files show a lock icon in the file tree
+- **Protection Center** — review active protections, batch-protect by extension, and add new protected paths from a dedicated dashboard
 - **Cannot be bypassed** by the sandboxed process — not even with python, node, or symlinks
 
 | Access method | Blocked? |
@@ -109,7 +118,8 @@ Or via System Settings → Privacy & Security → "Open Anyway".
 
 1. Launch FortShell → **Open Folder** → select your project
 2. A terminal opens automatically in the project directory
-3. Click **+ New** to add more terminals (or choose a specific shell)
+3. Use the left rail to switch between **Explorer** and **Protection**
+4. Click **+ New Terminal** to add more terminals
 
 ### Protecting Files
 
@@ -126,7 +136,8 @@ $ python3 -c "open('.env').read()"
 PermissionError: [Errno 1] Operation not permitted: '.env'
 ```
 
-5. To remove protection: right-click → **Remove Protection**
+5. Open **Protection** from the left rail to review, batch-add, or remove protected paths
+6. To remove protection from Explorer: right-click → **Remove Protection**
 
 ### Settings
 
