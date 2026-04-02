@@ -10,6 +10,20 @@ export type FileEntry = {
   children?: FileEntry[];
 };
 
+export type WorkspaceSearchOptions = {
+  query?: string;
+  extensions?: string[];
+  includeDirectories?: boolean;
+  limit?: number;
+};
+
+export type WorkspaceSearchResult = {
+  name: string;
+  path: string;
+  relativePath: string;
+  isDirectory: boolean;
+};
+
 function loadGitignore(rootPath: string): Ignore | null {
   const gitignorePath = path.join(rootPath, ".gitignore");
   try {
@@ -19,6 +33,26 @@ function loadGitignore(rootPath: string): Ignore | null {
     }
   } catch {}
   return null;
+}
+
+function shouldIgnoreEntry(
+  entry: fs.Dirent,
+  dirPath: string,
+  rootPath: string,
+  ig: Ignore | null,
+  excludeRootDotfiles: boolean
+): boolean {
+  if (DEFAULT_IGNORE.has(entry.name)) return true;
+  if (excludeRootDotfiles && entry.name.startsWith(".") && dirPath === rootPath) return true;
+
+  if (ig) {
+    const relativePath = path.relative(rootPath, path.join(dirPath, entry.name));
+    const posixPath = relativePath.replace(/\\/g, "/");
+    const testPath = entry.isDirectory() ? `${posixPath}/` : posixPath;
+    if (ig.ignores(testPath)) return true;
+  }
+
+  return false;
 }
 
 /**
@@ -59,16 +93,7 @@ export function indexDirectory(
   });
 
   for (const entry of entries) {
-    if (DEFAULT_IGNORE.has(entry.name)) continue;
-    if (entry.name.startsWith(".") && depth === 0) continue;
-
-    // Check .gitignore
-    if (ig && rootPath) {
-      const relativePath = path.relative(rootPath, path.join(dirPath, entry.name));
-      const posixPath = relativePath.replace(/\\/g, "/");
-      const testPath = entry.isDirectory() ? posixPath + "/" : posixPath;
-      if (ig.ignores(testPath)) continue;
-    }
+    if (rootPath && shouldIgnoreEntry(entry, dirPath, rootPath, ig ?? null, depth === 0)) continue;
 
     const fullPath = path.join(dirPath, entry.name);
     const fileEntry: FileEntry = {
@@ -94,4 +119,100 @@ export function expandDirectory(dirPath: string, rootPath: string): FileEntry[] 
   const ig = loadGitignore(rootPath);
   try { dirPath = fs.realpathSync(dirPath); } catch {}
   return indexDirectory(dirPath, 0, 1, rootPath, ig);
+}
+
+function normalizeExtensionToken(token: string): string | null {
+  const normalized = token.trim().toLowerCase();
+  if (!normalized) return null;
+  return normalized.startsWith(".") ? normalized : `.${normalized}`;
+}
+
+function matchesExtension(name: string, extension: string): boolean {
+  const lowerName = name.toLowerCase();
+  return (
+    lowerName === extension ||
+    lowerName.endsWith(extension) ||
+    lowerName.startsWith(`${extension}.`)
+  );
+}
+
+function searchDirectory(
+  dirPath: string,
+  rootPath: string,
+  ig: Ignore | null,
+  options: Required<WorkspaceSearchOptions>,
+  normalizedExtensions: string[],
+  results: WorkspaceSearchResult[]
+): void {
+  if (results.length >= options.limit) return;
+
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(dirPath, { withFileTypes: true });
+  } catch {
+    return;
+  }
+
+  entries.sort((a, b) => {
+    if (a.isDirectory() !== b.isDirectory()) {
+      return a.isDirectory() ? -1 : 1;
+    }
+    return a.name.localeCompare(b.name);
+  });
+
+  for (const entry of entries) {
+    if (shouldIgnoreEntry(entry, dirPath, rootPath, ig, false)) continue;
+
+    const fullPath = path.join(dirPath, entry.name);
+    const relativePath = path.relative(rootPath, fullPath).replace(/\\/g, "/");
+    const lowerName = entry.name.toLowerCase();
+    const lowerRelativePath = relativePath.toLowerCase();
+    const matchesQuery =
+      !options.query ||
+      lowerName.includes(options.query) ||
+      lowerRelativePath.includes(options.query);
+    const matchesExtensions =
+      normalizedExtensions.length === 0 ||
+      (!entry.isDirectory() &&
+        normalizedExtensions.some((extension) => matchesExtension(entry.name, extension)));
+    const includeEntry = entry.isDirectory() ? options.includeDirectories : true;
+
+    if (includeEntry && matchesQuery && matchesExtensions) {
+      results.push({
+        name: entry.name,
+        path: fullPath,
+        relativePath,
+        isDirectory: entry.isDirectory(),
+      });
+      if (results.length >= options.limit) return;
+    }
+
+    if (entry.isDirectory()) {
+      searchDirectory(fullPath, rootPath, ig, options, normalizedExtensions, results);
+      if (results.length >= options.limit) return;
+    }
+  }
+}
+
+export function searchWorkspace(
+  dirPath: string,
+  options: WorkspaceSearchOptions = {}
+): WorkspaceSearchResult[] {
+  let rootPath = dirPath;
+  try { rootPath = fs.realpathSync(dirPath); } catch {}
+
+  const normalizedOptions: Required<WorkspaceSearchOptions> = {
+    includeDirectories: options.includeDirectories ?? true,
+    limit: options.limit ?? 50,
+    query: options.query?.trim().toLowerCase() ?? "",
+    extensions: options.extensions ?? [],
+  };
+  const normalizedExtensions = normalizedOptions.extensions
+    .map(normalizeExtensionToken)
+    .filter((value): value is string => Boolean(value));
+  const ig = loadGitignore(rootPath);
+  const results: WorkspaceSearchResult[] = [];
+
+  searchDirectory(rootPath, rootPath, ig, normalizedOptions, normalizedExtensions, results);
+  return results;
 }

@@ -1,7 +1,13 @@
+import fs from "fs";
 import { ipcMain, dialog, BrowserWindow } from "electron";
 import { PtyManager } from "../terminal/pty-manager";
 import { detectProfiles } from "../terminal/profiles";
-import { indexDirectory, expandDirectory } from "../workspace/file-indexer";
+import {
+  indexDirectory,
+  expandDirectory,
+  searchWorkspace,
+  type WorkspaceSearchOptions,
+} from "../workspace/file-indexer";
 import { FileWatcher } from "../workspace/file-watcher";
 import { PolicyEngine } from "../policy/policy-engine";
 import { getRecentWorkspaces, addRecentWorkspace } from "../config/recent-workspaces";
@@ -70,17 +76,19 @@ export function registerIpcHandlers(
     });
     if (result.canceled || result.filePaths.length === 0) return null;
     const dirPath = result.filePaths[0];
-    await policyEngine.setProjectRoot(dirPath);
-    fileWatcher.watch(dirPath);
-    addRecentWorkspace(dirPath);
-    return dirPath;
+    const resolvedPath = fs.realpathSync(dirPath);
+    await policyEngine.setProjectRoot(resolvedPath);
+    fileWatcher.watch(resolvedPath);
+    addRecentWorkspace(resolvedPath);
+    return resolvedPath;
   });
 
   safeHandle("workspace:set-root", async (_event, dirPath: string) => {
-    await policyEngine.setProjectRoot(dirPath);
-    fileWatcher.watch(dirPath);
-    addRecentWorkspace(dirPath);
-    return dirPath;
+    const resolvedPath = fs.realpathSync(dirPath);
+    await policyEngine.setProjectRoot(resolvedPath);
+    fileWatcher.watch(resolvedPath);
+    addRecentWorkspace(resolvedPath);
+    return resolvedPath;
   });
 
   safeHandle("workspace:recent", () => {
@@ -93,6 +101,20 @@ export function registerIpcHandlers(
 
   safeHandle("workspace:expand", (_event, dirPath: string, rootPath: string) => {
     return expandDirectory(dirPath, rootPath);
+  });
+
+  safeHandle("workspace:search", (_event, dirPath: string, options: WorkspaceSearchOptions) => {
+    return searchWorkspace(dirPath, options);
+  });
+
+  safeHandle("workspace:describe", (_event, paths: string[]) => {
+    return paths.map((targetPath) => {
+      let isDirectory = false;
+      try {
+        isDirectory = fs.statSync(targetPath).isDirectory();
+      } catch {}
+      return { path: targetPath, isDirectory };
+    });
   });
 
   // Policy

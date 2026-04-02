@@ -10,20 +10,13 @@ export function applyDarwinStyles(): void {
 
 export const darwinOverrides = `
   .platform-darwin .app-header {
-    background: rgba(24, 24, 37, 0.8);
-    -webkit-backdrop-filter: blur(20px);
-    backdrop-filter: blur(20px);
+    background: rgba(10, 14, 20, 0.96);
   }
 
-  .platform-darwin .sidebar {
-    background: rgba(24, 24, 37, 0.7);
-    -webkit-backdrop-filter: blur(20px);
-    backdrop-filter: blur(20px);
-  }
-
-  .platform-darwin .status-bar {
-    background: rgba(24, 24, 37, 0.8);
-    -webkit-backdrop-filter: blur(20px);
-    backdrop-filter: blur(20px);
+  .platform-darwin .nav-rail,
+  .platform-darwin .explorer-pane,
+  .platform-darwin .content-area,
+  .platform-darwin .terminal-area {
+    background: rgba(24, 28, 34, 0.96);
   }
 `;

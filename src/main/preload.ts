@@ -57,6 +57,17 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("workspace:files", dirPath),
   workspaceExpand: (dirPath: string, rootPath: string) =>
     ipcRenderer.invoke("workspace:expand", dirPath, rootPath),
+  workspaceSearch: (
+    dirPath: string,
+    options: {
+      query?: string;
+      extensions?: string[];
+      includeDirectories?: boolean;
+      limit?: number;
+    }
+  ) => ipcRenderer.invoke("workspace:search", dirPath, options),
+  workspaceDescribe: (paths: string[]) =>
+    ipcRenderer.invoke("workspace:describe", paths),
   // Policy
   policySet: (filePath: string) =>
     ipcRenderer.invoke("policy:set", filePath),

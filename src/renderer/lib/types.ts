@@ -6,6 +6,13 @@ export type ShellProfile = {
   isDefault: boolean;
 };
 
+export type WorkspaceSearchResult = {
+  name: string;
+  path: string;
+  relativePath: string;
+  isDirectory: boolean;
+};
+
 export type ElectronAPI = {
   terminalCreate: (opts: {
     shell?: string;
@@ -31,6 +38,18 @@ export type ElectronAPI = {
   ) => () => void;
   workspaceFiles: (dirPath: string) => Promise<any[]>;
   workspaceExpand: (dirPath: string, rootPath: string) => Promise<any[]>;
+  workspaceSearch: (
+    dirPath: string,
+    options: {
+      query?: string;
+      extensions?: string[];
+      includeDirectories?: boolean;
+      limit?: number;
+    }
+  ) => Promise<WorkspaceSearchResult[]>;
+  workspaceDescribe: (
+    paths: string[]
+  ) => Promise<Array<{ path: string; isDirectory: boolean }>>;
   policySet: (filePath: string) => Promise<boolean>;
   policyRemove: (filePath: string) => Promise<boolean>;
   policyList: () => Promise<string[]>;

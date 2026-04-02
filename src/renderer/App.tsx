@@ -1,11 +1,8 @@
 import { useEffect, useState, useCallback, useRef } from "react";
-import {
-  TerminalPane,
-  destroyTerminalCache,
-} from "./components/Terminal/TerminalPane";
+import { destroyTerminalCache } from "./components/Terminal/TerminalPane";
 import { TerminalWorkspace } from "./components/Layout/TerminalWorkspace";
 import { FileTree } from "./components/FileTree/FileTree";
-import { StatusBar } from "./components/StatusBar/StatusBar";
+import { ProtectionCenter } from "./components/Protection/ProtectionCenter";
 import { Welcome } from "./components/Welcome/Welcome";
 import { Settings, type AppConfig } from "./components/Settings/Settings";
 import type { TerminalLayoutMode } from "./lib/terminalLayout";
@@ -24,16 +21,32 @@ type TerminalInfo = {
 
 const LAYOUT_MODES: TerminalLayoutMode[] = ["horizontal", "vertical", "grid"];
 const LAYOUT_LABELS: Record<TerminalLayoutMode, string> = {
-  horizontal: "\u2500",
-  vertical: "\u2502",
-  grid: "\u253C",
+  horizontal: "Horizontal",
+  vertical: "Vertical",
+  grid: "Grid",
 };
+
+function ExplorerRailIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M3 7.75A1.75 1.75 0 0 1 4.75 6h4.12c.46 0 .9.18 1.22.5l1.16 1.16c.14.14.33.22.53.22h7.5A1.75 1.75 0 0 1 21 9.62v6.63A1.75 1.75 0 0 1 19.25 18H4.75A1.75 1.75 0 0 1 3 16.25z" />
+    </svg>
+  );
+}
+
+function ProtectionRailIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M12 3.25 5.75 5.9v5.33c0 4.16 2.63 7.98 6.25 9.52 3.62-1.54 6.25-5.36 6.25-9.52V5.9z" />
+      <path d="M12 8.2a1.8 1.8 0 0 1 1.8 1.8v.65h.2a.9.9 0 0 1 .9.9v2.95a.9.9 0 0 1-.9.9H10a.9.9 0 0 1-.9-.9v-2.95a.9.9 0 0 1 .9-.9h.2V10A1.8 1.8 0 0 1 12 8.2Zm0 1.3a.5.5 0 0 0-.5.5v.65h1V10a.5.5 0 0 0-.5-.5Z" />
+    </svg>
+  );
+}
 
 export function App() {
   const [terminals, setTerminals] = useState<TerminalInfo[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [profiles, setProfiles] = useState<ShellProfile[]>([]);
-  const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [editingTabId, setEditingTabId] = useState<string | null>(null);
   const [layoutMode, setLayoutMode] = useState<TerminalLayoutMode>("horizontal");
   const [workspacePath, setWorkspacePath] = useState<string | null>(null);
@@ -42,6 +55,7 @@ export function App() {
   const [sidebarWidth, setSidebarWidth] = useState(250);
   const [showSettings, setShowSettings] = useState(false);
   const [fontSize, setFontSize] = useState(14);
+  const [sidebarTab, setSidebarTab] = useState<"explorer" | "protection">("explorer");
   const sidebarDragRef = useRef<{ startX: number; startWidth: number } | null>(null);
 
   // Menu bar Settings toggle
@@ -99,8 +113,8 @@ export function App() {
   }
 
   async function handleSelectRecent(path: string) {
-    await window.electronAPI.workspaceSetRoot(path);
-    setWorkspacePath(path);
+    const resolvedPath = await window.electronAPI.workspaceSetRoot(path);
+    setWorkspacePath(resolvedPath);
   }
 
   const createTerminal = useCallback(
@@ -118,7 +132,6 @@ export function App() {
         { id: result.id, name: result.name, status: "active" },
       ]);
       setActiveId(result.id);
-      setShowProfileMenu(false);
     },
     [profiles, workspacePath]
   );
@@ -163,12 +176,28 @@ export function App() {
     setProtectedPaths(new Set(paths));
   }
 
-  const cycleLayout = useCallback(() => {
-    setLayoutMode((prev) => {
-      const idx = LAYOUT_MODES.indexOf(prev);
-      return LAYOUT_MODES[(idx + 1) % LAYOUT_MODES.length];
-    });
-  }, []);
+  async function handleProtectMany(filePaths: string[]): Promise<number> {
+    const uniquePaths = Array.from(new Set(filePaths));
+    if (uniquePaths.length === 0) return 0;
+
+    const results = await Promise.all(
+      uniquePaths.map(async (filePath) => {
+        try {
+          return await window.electronAPI.policySet(filePath);
+        } catch {
+          return false;
+        }
+      })
+    );
+
+    const protectedCount = results.filter(Boolean).length;
+    if (protectedCount > 0) {
+      const paths = await window.electronAPI.policyList();
+      setProtectedPaths(new Set(paths));
+    }
+
+    return protectedCount;
+  }
 
   // Sidebar drag resize
   function handleSidebarDragStart(e: React.MouseEvent) {
@@ -254,7 +283,9 @@ export function App() {
     }
   }, [profiles, workspacePath, createTerminal]);
 
-  const useSplitLayout = terminals.length > 1;
+  const workspaceName = workspacePath?.split(/[/\\]/).pop() || "workspace";
+  const isExplorerView = sidebarTab === "explorer";
+  const showExplorerPane = isExplorerView && sidebarVisible;
 
   // Welcome screen when no workspace is open
   if (!workspacePath) {
@@ -278,114 +309,144 @@ export function App() {
   return (
     <div className="app">
       <div className="app-header">
-        <h1>{window.electronAPI.appName}</h1>
-        <div className="tab-bar">
-          {terminals.map((t) => (
-            <div
-              key={t.id}
-              className={`tab ${t.id === activeId ? "tab-active" : ""} ${t.status === "exited" ? "tab-exited" : ""} ${t.stalePolicy ? "tab-stale" : ""}`}
-              onClick={() => setActiveId(t.id)}
-            >
-              {t.stalePolicy && (
-                <span
-                  className="tab-stale-icon"
-                  title="Policy changed — restart to apply"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    restartTerminal(t.id);
-                  }}
-                >
-                  &#x21bb;
-                </span>
-              )}
-              {editingTabId === t.id ? (
-                <input
-                  className="tab-label-input"
-                  defaultValue={t.name}
-                  maxLength={50}
-                  autoFocus
-                  onBlur={(e) => {
-                    const newName = e.target.value.trim() || t.name;
-                    setTerminals((prev) =>
-                      prev.map((term) =>
-                        term.id === t.id ? { ...term, name: newName } : term
-                      )
-                    );
-                    setEditingTabId(null);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") e.currentTarget.blur();
-                    if (e.key === "Escape") {
-                      e.currentTarget.value = t.name;
-                      e.currentTarget.blur();
-                    }
-                  }}
-                  onClick={(e) => e.stopPropagation()}
-                />
-              ) : (
-                <span
-                  className="tab-label"
-                  onDoubleClick={(e) => {
-                    e.stopPropagation();
-                    setEditingTabId(t.id);
-                  }}
-                >
-                  {t.name}
-                </span>
-              )}
-              <span
-                className="tab-close"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  destroyTerminal(t.id);
-                }}
-              >
-                &times;
-              </span>
+        <div className="app-toolbar">
+          <div className="app-brand">
+            <div className="app-brand-mark">FS</div>
+            <div className="app-brand-copy">
+              <h1>{window.electronAPI.appName}</h1>
+              <p>terminal-first command shell</p>
             </div>
-          ))}
-          <div className="tab-new-wrapper">
-            <button
-              className="tab-new"
-              onClick={() => {
-                if (profiles.length <= 1) {
-                  createTerminal();
-                } else {
-                  setShowProfileMenu((prev) => !prev);
-                }
-              }}
-            >
-              + New
-            </button>
-            {showProfileMenu && (
-              <div className="profile-menu">
-                {profiles.map((p) => (
+          </div>
+          <div className="app-context">
+            <span className="app-context-label">Workspace / Root</span>
+            <span className="app-context-value" title={workspacePath}>
+              {workspaceName}
+            </span>
+          </div>
+          <div className="app-actions">
+            {isExplorerView && terminals.length > 1 && (
+              <div className="layout-toggle-group">
+                {LAYOUT_MODES.map((mode) => (
                   <button
-                    key={p.id}
-                    className="profile-menu-item"
-                    onClick={() => createTerminal(p.id)}
+                    key={mode}
+                    className={`layout-toggle ${layoutMode === mode ? "layout-toggle-active" : ""}`}
+                    onClick={() => setLayoutMode(mode)}
+                    title={`Layout: ${LAYOUT_LABELS[mode]}`}
                   >
-                    {p.label}
+                    {LAYOUT_LABELS[mode]}
                   </button>
                 ))}
               </div>
             )}
-          </div>
-          {terminals.length > 1 && (
             <button
-              className="layout-toggle"
-              onClick={cycleLayout}
-              title={`Layout: ${layoutMode}`}
+              className="tab-new"
+              onClick={() => {
+                createTerminal();
+              }}
             >
-              {LAYOUT_LABELS[layoutMode]}
+              + New Terminal
             </button>
-          )}
+          </div>
         </div>
+        {isExplorerView && (
+          <div className="tab-strip">
+            <div className="tab-bar">
+              {terminals.map((t) => (
+                <div
+                  key={t.id}
+                  className={`tab ${t.id === activeId ? "tab-active" : ""} ${t.status === "exited" ? "tab-exited" : ""} ${t.stalePolicy ? "tab-stale" : ""}`}
+                  onClick={() => setActiveId(t.id)}
+                >
+                  {t.stalePolicy && (
+                    <span
+                      className="tab-stale-icon"
+                      title="Policy changed — restart to apply"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        restartTerminal(t.id);
+                      }}
+                    >
+                      &#x21bb;
+                    </span>
+                  )}
+                  {editingTabId === t.id ? (
+                    <input
+                      className="tab-label-input"
+                      defaultValue={t.name}
+                      maxLength={50}
+                      autoFocus
+                      onBlur={(e) => {
+                        const newName = e.target.value.trim() || t.name;
+                        setTerminals((prev) =>
+                          prev.map((term) =>
+                            term.id === t.id ? { ...term, name: newName } : term
+                          )
+                        );
+                        setEditingTabId(null);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") e.currentTarget.blur();
+                        if (e.key === "Escape") {
+                          e.currentTarget.value = t.name;
+                          e.currentTarget.blur();
+                        }
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  ) : (
+                    <span
+                      className="tab-label"
+                      onDoubleClick={(e) => {
+                        e.stopPropagation();
+                        setEditingTabId(t.id);
+                      }}
+                    >
+                      {t.name}
+                    </span>
+                  )}
+                  <span
+                    className="tab-close"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      destroyTerminal(t.id);
+                    }}
+                  >
+                    &times;
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
       <div className="app-body">
-        {sidebarVisible && (
+        <aside className="nav-rail" aria-label="Primary navigation">
+          <button
+            className={`nav-rail-button ${isExplorerView ? "nav-rail-button-active" : ""}`}
+            title="Explorer"
+            aria-label="Explorer"
+            onClick={() => setSidebarTab("explorer")}
+          >
+            <ExplorerRailIcon />
+          </button>
+          <button
+            className={`nav-rail-button ${!isExplorerView ? "nav-rail-button-active" : ""}`}
+            title="Protection"
+            aria-label="Protection"
+            onClick={() => setSidebarTab("protection")}
+          >
+            <ProtectionRailIcon />
+            {protectedPaths.size > 0 && (
+              <span className="nav-rail-badge">{protectedPaths.size}</span>
+            )}
+          </button>
+        </aside>
+        {showExplorerPane && (
           <>
-            <aside className="sidebar" style={{ width: sidebarWidth, minWidth: sidebarWidth }}>
+            <aside
+              className="explorer-pane"
+              style={{ width: sidebarWidth, minWidth: sidebarWidth }}
+            >
               <FileTree
                 rootPath={workspacePath}
                 protectedPaths={protectedPaths}
@@ -394,14 +455,11 @@ export function App() {
                 onOpenFolder={openFolder}
               />
             </aside>
-            <div
-              className="sidebar-resize-handle"
-              onMouseDown={handleSidebarDragStart}
-            />
+            <div className="sidebar-resize-handle" onMouseDown={handleSidebarDragStart} />
           </>
         )}
-        <main className="terminal-area">
-          {useSplitLayout ? (
+        <main className={`content-area ${isExplorerView ? "" : "content-area-protection"}`}>
+          {isExplorerView ? (
             <TerminalWorkspace
               terminals={terminals}
               activeId={activeId}
@@ -410,32 +468,16 @@ export function App() {
               fontSize={fontSize}
             />
           ) : (
-            terminals.map((t) => (
-              <div
-                key={t.id}
-                style={{
-                  display: t.id === activeId ? "flex" : "none",
-                  width: "100%",
-                  height: "100%",
-                }}
-              >
-                <TerminalPane
-                  terminalId={t.id}
-                  isActive={t.id === activeId}
-                  fontSize={fontSize}
-                />
-              </div>
-            ))
+            <ProtectionCenter
+              rootPath={workspacePath}
+              protectedPaths={protectedPaths}
+              onProtect={handleProtect}
+              onProtectMany={handleProtectMany}
+              onUnprotect={handleUnprotect}
+            />
           )}
         </main>
       </div>
-      <StatusBar
-        terminalCount={terminals.length}
-        layoutMode={layoutMode}
-        workspacePath={workspacePath}
-        protectedCount={protectedPaths.size}
-        platform={window.electronAPI.platform}
-      />
       {showSettings && (
         <Settings
           onClose={() => setShowSettings(false)}

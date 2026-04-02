@@ -71,7 +71,11 @@ export function FileTree({
   return (
     <div className="filetree">
       <div className="filetree-header">
-        {rootPath.split(/[/\\]/).pop()}
+        <span className="filetree-eyebrow">Project Explorer</span>
+        <div className="filetree-header-row">
+          <span className="filetree-root-name">{rootPath.split(/[/\\]/).pop()}</span>
+          <span className="filetree-root-meta">{entries.length} items</span>
+        </div>
       </div>
       <div className="filetree-list">
         {entries.map((entry) => (
@@ -171,11 +175,11 @@ function FileTreeNode({
         onClick={handleToggle}
         onContextMenu={(e) => onContextMenu(e, entry)}
       >
-        <span className="filetree-icon">
+        <span className={`filetree-icon ${entry.isDirectory ? "filetree-icon-directory" : "filetree-icon-file"}`}>
           {entry.isDirectory ? (loading ? "\u22EF" : expanded ? "\u25BE" : "\u25B8") : " "}
         </span>
         <span className="filetree-name">{entry.name}</span>
-        {isProtected && <span className="filetree-lock" title="Protected">&#128274;</span>}
+        {isProtected && <span className="filetree-lock" title="Protected">LOCK</span>}
       </div>
       {expanded && children && (
         <div>

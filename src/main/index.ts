@@ -21,6 +21,7 @@ function createWindow(): void {
     height: 800,
     minWidth: 800,
     minHeight: 600,
+    backgroundColor: "#10141a",
     title: app.name,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -28,13 +29,6 @@ function createWindow(): void {
       nodeIntegration: false,
     },
   };
-
-  // macOS: vibrancy effect
-  if (process.platform === "darwin") {
-    windowOpts.vibrancy = "sidebar";
-    windowOpts.transparent = true;
-    windowOpts.titleBarStyle = "hiddenInset";
-  }
 
   mainWindow = new BrowserWindow(windowOpts);
 
