@@ -1,14 +1,24 @@
 import crypto from "crypto";
 import fs from "fs";
 import path from "path";
+import type { ProtectionPresetId, ProtectionRule, ProtectionRuleSource } from "../policy/protection-rules";
 import { resolveRealPath } from "../utils";
 
-type StoredPolicyFile = {
+type StoredPolicyFileV2 = {
   version: number;
   workspaceRoot: string;
   protected: string[];
   updatedAt: string;
 };
+
+type StoredPolicyFileV3 = {
+  version: 3;
+  workspaceRoot: string;
+  rules: ProtectionRule[];
+  updatedAt: string;
+};
+
+type StoredPolicyFile = StoredPolicyFileV2 | StoredPolicyFileV3;
 
 function getDefaultPolicyStoreDir(): string {
   const { app } = require("electron") as typeof import("electron");
@@ -46,9 +56,9 @@ function isRelativeToRoot(rootPath: string, candidatePath: string): boolean {
   return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
 }
 
-function toStoredPath(workspaceRoot: string, protectedPath: string): string {
+function toStoredPath(workspaceRoot: string, targetPath: string): string {
   const rootPath = resolveRealPath(workspaceRoot);
-  const normalizedPath = resolveRealPath(protectedPath);
+  const normalizedPath = resolveRealPath(targetPath);
 
   if (!isRelativeToRoot(rootPath, normalizedPath)) {
     return normalizedPath;
@@ -69,9 +79,77 @@ function fromStoredPath(workspaceRoot: string, storedPath: string): string {
     : resolveRealPath(path.join(rootPath, storedPath));
 }
 
+function parseStoredRule(rule: unknown): ProtectionRule | null {
+  if (!rule || typeof rule !== "object") {
+    return null;
+  }
+
+  const candidate = rule as Record<string, unknown>;
+  const id = typeof candidate.id === "string" ? candidate.id : "";
+  const kind = typeof candidate.kind === "string" ? candidate.kind : "";
+  const source = typeof candidate.source === "string" ? candidate.source : "";
+  const createdAt =
+    typeof candidate.createdAt === "string" ? candidate.createdAt : undefined;
+  const updatedAt =
+    typeof candidate.updatedAt === "string" ? candidate.updatedAt : undefined;
+
+  if (!id || !source) {
+    return null;
+  }
+
+  if ((kind === "path" || kind === "directory") && typeof candidate.targetPath === "string") {
+    return {
+      id,
+      kind,
+      source: source as ProtectionRuleSource,
+      targetPath: candidate.targetPath,
+      createdAt,
+      updatedAt,
+    };
+  }
+
+  if (kind === "extension" && Array.isArray(candidate.extensions)) {
+    return {
+      id,
+      kind,
+      source: source as ProtectionRuleSource,
+      extensions: candidate.extensions.filter(
+        (entry: unknown): entry is string => typeof entry === "string"
+      ),
+      createdAt,
+      updatedAt,
+    };
+  }
+
+  if (kind === "preset" && typeof candidate.presetId === "string") {
+    return {
+      id,
+      kind,
+      source: source as ProtectionRuleSource,
+      presetId: candidate.presetId as ProtectionPresetId,
+      createdAt,
+      updatedAt,
+    };
+  }
+
+  return null;
+}
+
 function parseStoredPolicy(raw: string, sourcePath: string): StoredPolicyFile | null {
   try {
     const data = JSON.parse(raw);
+
+    if (Array.isArray(data.rules)) {
+      return {
+        version: 3,
+        workspaceRoot: typeof data.workspaceRoot === "string" ? data.workspaceRoot : "",
+        rules: data.rules
+          .map((entry: unknown) => parseStoredRule(entry))
+          .filter((entry: ProtectionRule | null): entry is ProtectionRule => Boolean(entry)),
+        updatedAt: typeof data.updatedAt === "string" ? data.updatedAt : "",
+      };
+    }
+
     if (!Array.isArray(data.protected)) {
       return null;
     }
@@ -107,26 +185,73 @@ function removeLegacyPolicyFile(workspaceRoot: string): void {
   } catch {}
 }
 
+function toStoredRule(workspaceRoot: string, rule: ProtectionRule): ProtectionRule {
+  if (rule.kind === "path" || rule.kind === "directory") {
+    return {
+      ...rule,
+      targetPath: path.isAbsolute(rule.targetPath)
+        ? toStoredPath(workspaceRoot, rule.targetPath)
+        : rule.targetPath.replace(/\\/g, "/"),
+    };
+  }
+
+  return { ...rule };
+}
+
+function fromStoredRule(workspaceRoot: string, rule: ProtectionRule): ProtectionRule {
+  if (rule.kind === "path" || rule.kind === "directory") {
+    return {
+      ...rule,
+      targetPath: path.isAbsolute(rule.targetPath)
+        ? toStoredPath(workspaceRoot, rule.targetPath)
+        : rule.targetPath.replace(/\\/g, "/"),
+    };
+  }
+
+  return { ...rule };
+}
+
+function createMigratedRule(
+  workspaceRoot: string,
+  storedPath: string,
+  timestamp: string
+): ProtectionRule {
+  const absolutePath = fromStoredPath(workspaceRoot, storedPath);
+  let kind: ProtectionRule["kind"] = "path";
+
+  try {
+    if (fs.statSync(absolutePath).isDirectory()) {
+      kind = "directory";
+    }
+  } catch {}
+
+  return {
+    id: crypto.randomUUID(),
+    kind,
+    source: "manual",
+    targetPath: toStoredPath(workspaceRoot, absolutePath),
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+}
+
 export function saveWorkspacePolicy(
   workspaceRoot: string,
-  protectedPaths: Iterable<string>,
+  rules: readonly ProtectionRule[],
   policyStoreDir?: string
 ): void {
   const filePath = getWorkspacePolicyPath(workspaceRoot, policyStoreDir);
   const dirPath = path.dirname(filePath);
   const normalizedRoot = resolveRealPath(workspaceRoot);
-  const protectedEntries = Array.from(new Set(
-    Array.from(protectedPaths, (entry) => toStoredPath(normalizedRoot, entry))
-  )).sort();
 
   if (!fs.existsSync(dirPath)) {
     fs.mkdirSync(dirPath, { recursive: true });
   }
 
-  const data: StoredPolicyFile = {
-    version: 2,
+  const data: StoredPolicyFileV3 = {
+    version: 3,
     workspaceRoot: normalizedRoot,
-    protected: protectedEntries,
+    rules: rules.map((rule) => toStoredRule(normalizedRoot, rule)),
     updatedAt: new Date().toISOString(),
   };
 
@@ -137,28 +262,37 @@ export function saveWorkspacePolicy(
 export function loadWorkspacePolicy(
   workspaceRoot: string,
   policyStoreDir?: string
-): Set<string> {
+): ProtectionRule[] {
   const normalizedRoot = resolveRealPath(workspaceRoot);
   const filePath = getWorkspacePolicyPath(normalizedRoot, policyStoreDir);
 
   if (fs.existsSync(filePath)) {
     const data = parseStoredPolicy(fs.readFileSync(filePath, "utf-8"), filePath);
     removeLegacyPolicyFile(normalizedRoot);
-    if (!data) return new Set();
-    return new Set(data.protected.map((entry) => fromStoredPath(normalizedRoot, entry)));
+    if (!data) return [];
+
+    if ("rules" in data) {
+      return data.rules.map((rule) => fromStoredRule(normalizedRoot, rule));
+    }
+
+    const migratedRules = data.protected.map((entry) =>
+      createMigratedRule(normalizedRoot, entry, data.updatedAt || new Date().toISOString())
+    );
+    saveWorkspacePolicy(normalizedRoot, migratedRules, policyStoreDir);
+    return migratedRules;
   }
 
   const legacyPath = getLegacyPolicyPath(normalizedRoot);
   if (!fs.existsSync(legacyPath)) {
-    return new Set();
+    return [];
   }
 
   const data = parseStoredPolicy(fs.readFileSync(legacyPath, "utf-8"), legacyPath);
-  if (!data) return new Set();
+  if (!data || "rules" in data) return [];
 
-  const protectedPaths = new Set(
-    data.protected.map((entry) => fromStoredPath(normalizedRoot, entry))
+  const migratedRules = data.protected.map((entry) =>
+    createMigratedRule(normalizedRoot, entry, data.updatedAt || new Date().toISOString())
   );
-  saveWorkspacePolicy(normalizedRoot, protectedPaths, policyStoreDir);
-  return protectedPaths;
+  saveWorkspacePolicy(normalizedRoot, migratedRules, policyStoreDir);
+  return migratedRules;
 }

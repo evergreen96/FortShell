@@ -63,6 +63,80 @@ describe("PolicyEngine", () => {
     expect(engine2.isProtected(filePath)).toBe(true);
   });
 
+  it("loads rule-based workspace policy files", async () => {
+    const filePath = path.join(tmpDir, ".env");
+    fs.writeFileSync(filePath, "secret");
+
+    const policyPath = getWorkspacePolicyPath(tmpDir, policyStoreDir);
+    fs.mkdirSync(path.dirname(policyPath), { recursive: true });
+    fs.writeFileSync(
+      policyPath,
+      JSON.stringify({
+        version: 3,
+        workspaceRoot: fs.realpathSync(tmpDir),
+        rules: [
+          {
+            id: "rule-1",
+            kind: "path",
+            source: "manual",
+            targetPath: ".env",
+            createdAt: "2026-04-03T00:00:00.000Z",
+            updatedAt: "2026-04-03T00:00:00.000Z",
+          },
+        ],
+        updatedAt: "2026-04-03T00:00:00.000Z",
+      }),
+      "utf-8"
+    );
+
+    await engine.setProjectRoot(tmpDir);
+
+    expect(engine.isProtected(filePath)).toBe(true);
+  });
+
+  it("persists manual protections as version 3 path rules", async () => {
+    await engine.setProjectRoot(tmpDir);
+
+    const filePath = path.join(tmpDir, "nested", "secret.txt");
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(filePath, "secret");
+
+    await engine.protect(filePath);
+
+    const storedPolicy = JSON.parse(
+      fs.readFileSync(getWorkspacePolicyPath(tmpDir, policyStoreDir), "utf-8")
+    );
+
+    expect(storedPolicy).toMatchObject({
+      version: 3,
+      workspaceRoot: fs.realpathSync(tmpDir),
+      rules: [
+        {
+          kind: "path",
+          source: "manual",
+          targetPath: "nested/secret.txt",
+          createdAt: expect.any(String),
+          updatedAt: expect.any(String),
+        },
+      ],
+      updatedAt: expect.any(String),
+    });
+    expect(storedPolicy.protected).toBeUndefined();
+
+    const rules = (
+      engine as unknown as {
+        listRules?: () => Array<Record<string, unknown>>;
+      }
+    ).listRules?.();
+
+    expect(rules).toHaveLength(1);
+    expect(rules?.[0]).toMatchObject({
+      kind: "path",
+      source: "manual",
+      targetPath: "nested/secret.txt",
+    });
+  });
+
   it("should not duplicate protections", async () => {
     const filePath = path.join(tmpDir, "file.txt");
     fs.writeFileSync(filePath, "data");
@@ -164,6 +238,45 @@ describe("PolicyEngine", () => {
     expect(engine.isProtected(filePath)).toBe(true);
     expect(fs.existsSync(getWorkspacePolicyPath(tmpDir, policyStoreDir))).toBe(true);
     expect(fs.existsSync(legacyPath)).toBe(false);
+  });
+
+  it("migrates version 2 workspace policy files into manual path rules on load", async () => {
+    const filePath = path.join(tmpDir, "secret.txt");
+    fs.writeFileSync(filePath, "secret");
+
+    const policyPath = getWorkspacePolicyPath(tmpDir, policyStoreDir);
+    fs.mkdirSync(path.dirname(policyPath), { recursive: true });
+    fs.writeFileSync(
+      policyPath,
+      JSON.stringify({
+        version: 2,
+        workspaceRoot: fs.realpathSync(tmpDir),
+        protected: ["secret.txt"],
+        updatedAt: "2026-04-03T00:00:00.000Z",
+      }),
+      "utf-8"
+    );
+
+    await engine.setProjectRoot(tmpDir);
+
+    expect(engine.isProtected(filePath)).toBe(true);
+
+    const migratedPolicy = JSON.parse(fs.readFileSync(policyPath, "utf-8"));
+    expect(migratedPolicy).toMatchObject({
+      version: 3,
+      workspaceRoot: fs.realpathSync(tmpDir),
+      rules: [
+        {
+          kind: "path",
+          source: "manual",
+          targetPath: "secret.txt",
+          createdAt: expect.any(String),
+          updatedAt: expect.any(String),
+        },
+      ],
+      updatedAt: expect.any(String),
+    });
+    expect(migratedPolicy.protected).toBeUndefined();
   });
 
   it("should clear protections when switching to a workspace without policy", async () => {
