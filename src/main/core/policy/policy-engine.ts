@@ -587,9 +587,9 @@ export class PolicyEngine {
       details.push(`final cleanup failed: ${errorMessage(finalCleanupError)}`);
     }
 
-    this.commitPolicySnapshot(
-      this.buildPolicySnapshot(snapshot.projectRoot, [])
-    );
+    this.commitPolicySnapshot(this.buildPolicySnapshot(snapshot.projectRoot, []));
+    this.bumpPolicyRevision();
+    this.save();
     throw new Error(details.join("; "));
   }
 
@@ -817,6 +817,11 @@ export class PolicyEngine {
       details.push(`final cleanup failed: ${errorMessage(finalCleanupError)}`);
     }
 
+    this.commitPolicySnapshot(
+      this.buildPolicySnapshot(previousSnapshot.projectRoot, [])
+    );
+    this.bumpPolicyRevision();
+    this.save();
     throw new Error(details.join("; "));
   }
 

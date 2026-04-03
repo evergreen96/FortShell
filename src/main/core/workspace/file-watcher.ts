@@ -9,6 +9,11 @@ type WorkspaceChangePayload = {
   filename: string;
 };
 
+export function shouldIgnoreWorkspaceChange(filename: string): boolean {
+  const parts = filename.split(path.sep);
+  return parts.some((part) => DEFAULT_IGNORE.has(part));
+}
+
 export class FileWatcher {
   private watchers = new Map<string, fs.FSWatcher>();
   private debounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -23,10 +28,7 @@ export class FileWatcher {
         { recursive: true },
         (eventType, filename) => {
           if (!filename) return;
-          // Skip ignored directories
-          const parts = filename.split(path.sep);
-          if (parts.some((p) => DEFAULT_IGNORE.has(p))) return;
-          if (parts[0]?.startsWith(".")) return;
+          if (shouldIgnoreWorkspaceChange(filename)) return;
 
           this.notifyChange(dirPath, eventType, filename);
         }
@@ -39,7 +41,7 @@ export class FileWatcher {
       try {
         const watcher = fs.watch(dirPath, (eventType, filename) => {
           if (!filename) return;
-          if (DEFAULT_IGNORE.has(filename)) return;
+          if (shouldIgnoreWorkspaceChange(filename)) return;
           this.notifyChange(dirPath, eventType, filename);
         });
         this.watchers.set(dirPath, watcher);

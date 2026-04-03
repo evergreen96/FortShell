@@ -170,6 +170,10 @@ export function getProtectionRuleSourceLabel(
   }
 
   if (rule.kind === "directory") {
+    if (rule.source === "directory") {
+      return "Directory Folder";
+    }
+
     return rule.source === "import" ? "Imported Folder" : "Manual Folder";
   }
 

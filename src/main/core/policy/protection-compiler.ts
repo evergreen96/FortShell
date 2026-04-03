@@ -144,7 +144,9 @@ function compileRuleEntries(
           type: entry.isDirectory ? "folder" : "file",
           status: "shielded",
           canRemoveDirectly:
-            rule.source === "manual" && directTarget !== null && entry.relativePath === directTarget,
+            (rule.source === "manual" || rule.source === "directory") &&
+            directTarget !== null &&
+            entry.relativePath === directTarget,
           sourceRuleId: rule.id,
           sourceKind: rule.kind,
           sourceLabel,

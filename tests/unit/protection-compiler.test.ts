@@ -115,6 +115,33 @@ describe("compileProtectionRules", () => {
       entries.find((entry) => entry.relativePath === "secrets")
     ).toMatchObject({
       canRemoveDirectly: true,
+      sourceLabel: "Manual Folder",
+    });
+    expect(
+      entries.find((entry) => entry.relativePath === "secrets/db.txt")
+    ).toMatchObject({
+      canRemoveDirectly: false,
+    });
+  });
+
+  it("marks only the directory root row from the directory rule API as directly removable", () => {
+    const entries = compileProtectionRules({
+      workspaceRoot: "/repo",
+      rules: [
+        { id: "dir-1", kind: "directory", source: "directory", targetPath: "/repo/secrets" },
+      ],
+      presetCatalog: BUILT_IN_PRESETS,
+      workspaceEntries: [
+        { path: "/repo/secrets", relativePath: "secrets", name: "secrets", ext: "", isDirectory: true },
+        { path: "/repo/secrets/db.txt", relativePath: "secrets/db.txt", name: "db.txt", ext: ".txt", isDirectory: false },
+      ],
+    });
+
+    expect(
+      entries.find((entry) => entry.relativePath === "secrets")
+    ).toMatchObject({
+      canRemoveDirectly: true,
+      sourceLabel: "Directory Folder",
     });
     expect(
       entries.find((entry) => entry.relativePath === "secrets/db.txt")

@@ -258,7 +258,7 @@ describe("PolicyEngine", () => {
     }
   });
 
-  it("retains the previous snapshot when rollback replay fails", async () => {
+  it("falls back to an empty snapshot when rollback replay fails", async () => {
     const previousAPath = path.join(tmpDir, "previous-a.txt");
     const previousBPath = path.join(tmpDir, "previous-b.txt");
     fs.writeFileSync(previousAPath, "a");
@@ -341,16 +341,25 @@ describe("PolicyEngine", () => {
 
       await expect(engine.setProjectRoot(nextDir)).rejects.toThrow("restore failed");
       expect(cleanupCalls).toBeGreaterThanOrEqual(2);
-      expect(engine.list()).toEqual([
-        fs.realpathSync(previousAPath),
-        fs.realpathSync(previousBPath),
-      ]);
-      expect(engine.listRules()).toHaveLength(2);
-      expect(engine.isProtected(previousAPath)).toBe(true);
-      expect(engine.isProtected(previousBPath)).toBe(true);
+      expect(engine.list()).toEqual([]);
+      expect(engine.listRules()).toEqual([]);
+      expect(engine.isProtected(previousAPath)).toBe(false);
+      expect(engine.isProtected(previousBPath)).toBe(false);
       expect(engine.isProtected(nextEnvPath)).toBe(false);
       expect(engine.isProtected(nextSecretPath)).toBe(false);
-      expect(engine.getPolicyRevision()).toBe(2);
+      expect(engine.getPolicyRevision()).toBe(3);
+      expect(
+        JSON.parse(
+          fs.readFileSync(
+            getWorkspacePolicyPath(tmpDir, policyStoreDir),
+            "utf-8"
+          )
+        )
+      ).toMatchObject({
+        version: 3,
+        workspaceRoot: fs.realpathSync(tmpDir),
+        rules: [],
+      });
     } finally {
       fs.rmSync(nextDir, { recursive: true, force: true });
     }
@@ -478,13 +487,13 @@ describe("PolicyEngine", () => {
     });
     expect(compiled.find((entry) => entry.relativePath === "secrets")).toMatchObject({
       type: "folder",
-      sourceLabel: "Manual Folder",
+      sourceLabel: "Directory Folder",
     });
     expect(
       compiled.find((entry) => entry.relativePath === "secrets/db.txt")
     ).toMatchObject({
       type: "file",
-      sourceLabel: "Manual Folder",
+      sourceLabel: "Directory Folder",
     });
   });
 
@@ -773,7 +782,16 @@ describe("PolicyEngine", () => {
     expect(engine.isProtected(previousBPath)).toBe(false);
     expect(engine.isProtected(nextPath)).toBe(false);
     expect(appliedPaths).toEqual(new Set<string>());
-    expect(engine.getPolicyRevision()).toBe(2);
+    expect(engine.getPolicyRevision()).toBe(3);
+    expect(
+      JSON.parse(
+        fs.readFileSync(getWorkspacePolicyPath(tmpDir, policyStoreDir), "utf-8")
+      )
+    ).toMatchObject({
+      version: 3,
+      workspaceRoot: fs.realpathSync(tmpDir),
+      rules: [],
+    });
   });
 
   it("restores the previous enforcer state when dynamic recompilation fails mid-diff", async () => {
