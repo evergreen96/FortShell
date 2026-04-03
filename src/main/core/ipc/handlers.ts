@@ -21,6 +21,22 @@ function notifyPolicyChanged(): void {
   }
 }
 
+function notifySessionStateChanged(
+  ptyManager: PtyManager,
+  policyEngine: PolicyEngine
+): void {
+  const payload = {
+    sessions: ptyManager.getSessions(),
+    policyRevision: policyEngine.getPolicyRevision(),
+  };
+
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) {
+      win.webContents.send("terminal:session-state", payload);
+    }
+  }
+}
+
 function safeHandle(
   channel: string,
   handler: (event: Electron.IpcMainInvokeEvent, ...args: any[]) => any
@@ -41,6 +57,11 @@ export function registerIpcHandlers(
   policyEngine: PolicyEngine,
   fileWatcher: FileWatcher
 ): void {
+  ptyManager.setPolicyRevision(policyEngine.getPolicyRevision());
+  ptyManager.onSessionStateChanged(() => {
+    notifySessionStateChanged(ptyManager, policyEngine);
+  });
+
   // Terminal
   safeHandle("terminal:create", (event, opts) => {
     const webContents = event.sender;
@@ -78,6 +99,7 @@ export function registerIpcHandlers(
     const dirPath = result.filePaths[0];
     const resolvedPath = fs.realpathSync(dirPath);
     await policyEngine.setProjectRoot(resolvedPath);
+    ptyManager.markPolicyRevisionChanged(policyEngine.getPolicyRevision());
     fileWatcher.watch(resolvedPath);
     addRecentWorkspace(resolvedPath);
     return resolvedPath;
@@ -86,6 +108,7 @@ export function registerIpcHandlers(
   safeHandle("workspace:set-root", async (_event, dirPath: string) => {
     const resolvedPath = fs.realpathSync(dirPath);
     await policyEngine.setProjectRoot(resolvedPath);
+    ptyManager.markPolicyRevisionChanged(policyEngine.getPolicyRevision());
     fileWatcher.watch(resolvedPath);
     addRecentWorkspace(resolvedPath);
     return resolvedPath;
@@ -120,13 +143,19 @@ export function registerIpcHandlers(
   // Policy
   safeHandle("policy:set", async (_event, filePath: string) => {
     const result = await policyEngine.protect(filePath);
-    if (result) notifyPolicyChanged();
+    if (result) {
+      ptyManager.markPolicyRevisionChanged(policyEngine.getPolicyRevision());
+      notifyPolicyChanged();
+    }
     return result;
   });
 
   safeHandle("policy:remove", async (_event, filePath: string) => {
     const result = await policyEngine.unprotect(filePath);
-    if (result) notifyPolicyChanged();
+    if (result) {
+      ptyManager.markPolicyRevisionChanged(policyEngine.getPolicyRevision());
+      notifyPolicyChanged();
+    }
     return result;
   });
 

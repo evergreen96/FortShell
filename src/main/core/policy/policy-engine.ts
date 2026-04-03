@@ -12,6 +12,7 @@ export class PolicyEngine {
   private projectRoot: string | null = null;
   private enforcer: PolicyEnforcer | null = null;
   private readonly policyStoreDir?: string;
+  private policyRevision = 0;
 
   constructor(options: PolicyEngineOptions = {}) {
     this.policyStoreDir = options.policyStoreDir;
@@ -19,6 +20,10 @@ export class PolicyEngine {
 
   setEnforcer(enforcer: PolicyEnforcer): void {
     this.enforcer = enforcer;
+  }
+
+  getPolicyRevision(): number {
+    return this.policyRevision;
   }
 
   async setProjectRoot(root: string): Promise<void> {
@@ -32,6 +37,7 @@ export class PolicyEngine {
 
     this.projectRoot = resolveRealPath(root);
     this.load();
+    this.policyRevision = 0;
 
     if (this.enforcer?.isAvailable()) {
       for (const p of this.protectedPaths) {
@@ -53,6 +59,7 @@ export class PolicyEngine {
     }
 
     this.protectedPaths.add(normalized);
+    this.bumpPolicyRevision();
     this.save();
     return true;
   }
@@ -66,6 +73,7 @@ export class PolicyEngine {
     }
 
     this.protectedPaths.delete(normalized);
+    this.bumpPolicyRevision();
     this.save();
     return true;
   }
@@ -111,5 +119,9 @@ export class PolicyEngine {
     } catch (err) {
       console.warn(`[policy] Failed to load policy:`, err);
     }
+  }
+
+  private bumpPolicyRevision(): void {
+    this.policyRevision += 1;
   }
 }

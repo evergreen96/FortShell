@@ -74,6 +74,24 @@ describe("PolicyEngine", () => {
     expect(engine.list().length).toBe(1);
   });
 
+  it("increments policy revision only when effective protection changes", async () => {
+    await engine.setProjectRoot(tmpDir);
+    const filePath = path.join(tmpDir, "secret.txt");
+    fs.writeFileSync(filePath, "secret");
+
+    const initialRevision = engine.getPolicyRevision();
+    expect(initialRevision).toBe(0);
+
+    expect(await engine.protect(filePath)).toBe(true);
+    expect(engine.getPolicyRevision()).toBe(1);
+
+    expect(await engine.protect(filePath)).toBe(false);
+    expect(engine.getPolicyRevision()).toBe(1);
+
+    expect(await engine.unprotect(filePath)).toBe(true);
+    expect(engine.getPolicyRevision()).toBe(2);
+  });
+
   it("should migrate legacy per-project policy files", async () => {
     const filePath = path.join(tmpDir, "secret.txt");
     fs.writeFileSync(filePath, "secret");
