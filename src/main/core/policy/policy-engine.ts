@@ -27,6 +27,8 @@ export class PolicyEngine {
   }
 
   async setProjectRoot(root: string): Promise<void> {
+    const previousContext = this.getEffectivePolicyContext();
+
     if (this.enforcer?.isAvailable()) {
       try {
         await this.enforcer.cleanup();
@@ -37,7 +39,11 @@ export class PolicyEngine {
 
     this.projectRoot = resolveRealPath(root);
     this.load();
-    this.policyRevision = 0;
+
+    const nextContext = this.getEffectivePolicyContext();
+    if (previousContext !== null && previousContext !== nextContext) {
+      this.bumpPolicyRevision();
+    }
 
     if (this.enforcer?.isAvailable()) {
       for (const p of this.protectedPaths) {
@@ -53,6 +59,7 @@ export class PolicyEngine {
   async protect(filePath: string): Promise<boolean> {
     const normalized = resolveRealPath(filePath);
     if (this.protectedPaths.has(normalized)) return false;
+    if (this.isProtected(normalized)) return false;
 
     if (this.enforcer?.isAvailable()) {
       await this.enforcer.applyProtection(normalized);
@@ -73,7 +80,9 @@ export class PolicyEngine {
     }
 
     this.protectedPaths.delete(normalized);
-    this.bumpPolicyRevision();
+    if (!this.isProtected(normalized)) {
+      this.bumpPolicyRevision();
+    }
     this.save();
     return true;
   }
@@ -123,5 +132,17 @@ export class PolicyEngine {
 
   private bumpPolicyRevision(): void {
     this.policyRevision += 1;
+  }
+
+  private getEffectivePolicyContext(): string | null {
+    if (!this.projectRoot) {
+      return null;
+    }
+
+    const protectedEntries = Array.from(this.protectedPaths).sort();
+    return JSON.stringify({
+      projectRoot: this.projectRoot,
+      protectedEntries,
+    });
   }
 }

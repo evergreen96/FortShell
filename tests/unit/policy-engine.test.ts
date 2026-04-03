@@ -92,6 +92,58 @@ describe("PolicyEngine", () => {
     expect(engine.getPolicyRevision()).toBe(2);
   });
 
+  it("increments policy revision when switching workspaces", async () => {
+    const otherDir = fs.mkdtempSync(path.join(os.tmpdir(), "ai-ide-test-other-"));
+
+    try {
+      await engine.setProjectRoot(tmpDir);
+      expect(engine.getPolicyRevision()).toBe(0);
+
+      await engine.setProjectRoot(otherDir);
+      expect(engine.getPolicyRevision()).toBe(1);
+
+      await engine.setProjectRoot(tmpDir);
+      expect(engine.getPolicyRevision()).toBe(2);
+    } finally {
+      fs.rmSync(otherDir, { recursive: true, force: true });
+    }
+  });
+
+  it("does not increment policy revision for inherited protection no-ops", async () => {
+    await engine.setProjectRoot(tmpDir);
+    const protectedDir = path.join(tmpDir, "secrets");
+    const childPath = path.join(protectedDir, "key.pem");
+    fs.mkdirSync(protectedDir);
+    fs.writeFileSync(childPath, "key");
+
+    expect(await engine.protect(protectedDir)).toBe(true);
+    expect(engine.getPolicyRevision()).toBe(1);
+
+    expect(await engine.protect(childPath)).toBe(false);
+    expect(engine.getPolicyRevision()).toBe(1);
+
+    expect(await engine.unprotect(childPath)).toBe(false);
+    expect(engine.getPolicyRevision()).toBe(1);
+  });
+
+  it("removes redundant child protections without incrementing policy revision", async () => {
+    await engine.setProjectRoot(tmpDir);
+    const protectedDir = path.join(tmpDir, "secrets");
+    const childPath = path.join(protectedDir, "key.pem");
+    fs.mkdirSync(protectedDir);
+    fs.writeFileSync(childPath, "key");
+
+    expect(await engine.protect(childPath)).toBe(true);
+    expect(engine.getPolicyRevision()).toBe(1);
+
+    expect(await engine.protect(protectedDir)).toBe(true);
+    expect(engine.getPolicyRevision()).toBe(2);
+
+    expect(await engine.unprotect(childPath)).toBe(true);
+    expect(engine.getPolicyRevision()).toBe(2);
+    expect(engine.isProtected(childPath)).toBe(true);
+  });
+
   it("should migrate legacy per-project policy files", async () => {
     const filePath = path.join(tmpDir, "secret.txt");
     fs.writeFileSync(filePath, "secret");
