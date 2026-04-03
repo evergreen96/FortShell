@@ -2,6 +2,7 @@ node_modules/
 dist-main/
 dist-renderer/
 release/
+.worktrees/
 .vite/
 
 # Native build artifacts (source is tracked, binary is not)
