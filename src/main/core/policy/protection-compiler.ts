@@ -164,5 +164,7 @@ export function compileProtectionRules(
     }
   }
 
-  return Array.from(compiled.values());
+  return Array.from(compiled.values()).sort((left, right) =>
+    left.relativePath.localeCompare(right.relativePath)
+  );
 }
