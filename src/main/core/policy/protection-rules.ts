@@ -64,6 +64,9 @@ export type WorkspaceProtectionEntry = {
 };
 
 export type CompiledProtectionEntry = WorkspaceProtectionEntry & {
+  type: "file" | "directory";
+  status: "shielded";
+  canRemoveDirectly: boolean;
   sourceRuleId: string;
   sourceKind: ProtectionRuleKind;
   sourceLabel: string;

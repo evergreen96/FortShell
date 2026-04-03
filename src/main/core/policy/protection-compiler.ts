@@ -134,14 +134,17 @@ function compileRuleEntries(
       );
     }
 
-    if (matches) {
-      matched.push({
-        ...entry,
-        sourceRuleId: rule.id,
-        sourceKind: rule.kind,
-        sourceLabel,
-      });
-    }
+      if (matches) {
+        matched.push({
+          ...entry,
+          type: entry.isDirectory ? "directory" : "file",
+          status: "shielded",
+          canRemoveDirectly: rule.source === "manual",
+          sourceRuleId: rule.id,
+          sourceKind: rule.kind,
+          sourceLabel,
+        });
+      }
   }
 
   return matched;

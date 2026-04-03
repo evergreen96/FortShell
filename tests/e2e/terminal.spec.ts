@@ -168,4 +168,34 @@ test.describe("Policy Integration", () => {
       return await (window as any).electronAPI.policyRemove(fp);
     }, filePath);
   });
+
+  test("should expose compiled protection rows with concrete-path fields", async () => {
+    const filePath = path.join(tmpDir, "shielded.txt");
+    fs.writeFileSync(filePath, "shielded");
+
+    await page.evaluate(async (rootPath) => {
+      return await (window as any).electronAPI.workspaceSetRoot(rootPath);
+    }, tmpDir);
+
+    await page.evaluate(async (fp) => {
+      return await (window as any).electronAPI.policySet(fp);
+    }, filePath);
+
+    const compiled = await page.evaluate(async () => {
+      return await (window as any).electronAPI.protectionListCompiled();
+    });
+
+    expect(compiled).toHaveLength(1);
+    expect(compiled[0]).toMatchObject({
+      path: fs.realpathSync(filePath),
+      relativePath: "shielded.txt",
+      type: "file",
+      status: "shielded",
+      canRemoveDirectly: true,
+    });
+
+    await page.evaluate(async (fp) => {
+      return await (window as any).electronAPI.policyRemove(fp);
+    }, filePath);
+  });
 });

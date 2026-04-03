@@ -98,6 +98,75 @@ function normalizeExtensionTokens(extensions: readonly string[]): string[] {
   ).sort();
 }
 
+function resolveWorkspaceTargetPath(
+  projectRoot: string | null,
+  targetPath: string
+): string | null {
+  if (!projectRoot) {
+    return null;
+  }
+
+  const normalizedRoot = resolveRealPath(projectRoot);
+  const candidatePath = path.isAbsolute(targetPath)
+    ? resolveRealPath(targetPath)
+    : resolveRealPath(path.join(normalizedRoot, targetPath));
+
+  if (!isRelativeToRoot(normalizedRoot, candidatePath)) {
+    return null;
+  }
+
+  return candidatePath;
+}
+
+type NormalizeImportedRuleResult =
+  | { rule: ProtectionRule }
+  | { reason: "outside-workspace" | "invalid-rule" };
+
+function normalizeImportedRuleForCurrentWorkspace(
+  projectRoot: string | null,
+  rule: ProtectionRule
+): NormalizeImportedRuleResult {
+  if (rule.kind === "path" || rule.kind === "directory") {
+    const resolvedTargetPath = resolveWorkspaceTargetPath(projectRoot, rule.targetPath);
+    if (!resolvedTargetPath) {
+      return { reason: "outside-workspace" };
+    }
+
+    return {
+      rule: {
+        ...rule,
+        targetPath: toStoredTargetPath(projectRoot, resolvedTargetPath),
+      },
+    };
+  }
+
+  if (rule.kind === "extension") {
+    const extensions = normalizeExtensionTokens(rule.extensions);
+    if (extensions.length === 0) {
+      return { reason: "invalid-rule" };
+    }
+
+    return {
+      rule: {
+        ...rule,
+        extensions,
+      },
+    };
+  }
+
+  if (rule.kind === "preset" && !getProtectionPresetById(rule.presetId, BUILT_IN_PRESETS)) {
+    return { reason: "invalid-rule" };
+  }
+
+  if (rule.kind === "preset") {
+    return {
+      rule: { ...rule },
+    };
+  }
+
+  return { reason: "invalid-rule" };
+}
+
 function serializeRuleForComparison(
   projectRoot: string | null,
   rule: ProtectionRule
@@ -278,7 +347,10 @@ export class PolicyEngine {
   }
 
   async addDirectoryRule(targetPath: string): Promise<PolicyMutationResult> {
-    const normalized = resolveRealPath(targetPath);
+    const normalized = resolveWorkspaceTargetPath(this.projectRoot, targetPath);
+    if (!normalized) {
+      return { changed: false, reason: "outside-workspace" };
+    }
     if (this.isProtected(normalized)) {
       return { changed: false, reason: "already-protected" };
     }
@@ -307,12 +379,17 @@ export class PolicyEngine {
       return { changed: false, reason: "workspace-not-set" };
     }
 
-    const importedRoot = resolveRealPath(policy.workspaceRoot);
-    if (importedRoot !== this.projectRoot) {
-      return { changed: false, reason: "workspace-root-mismatch" };
+    const normalizedRules: ProtectionRule[] = [];
+    for (const rule of policy.rules) {
+      const normalized = normalizeImportedRuleForCurrentWorkspace(this.projectRoot, rule);
+      if ("reason" in normalized) {
+        return { changed: false, reason: normalized.reason };
+      }
+
+      normalizedRules.push(normalized.rule);
     }
 
-    return this.replaceRules(policy.rules.map((rule) => cloneRule(rule)));
+    return this.replaceRules(normalizedRules);
   }
 
   exportWorkspacePolicy(): ProtectionWorkspacePolicy | null {
@@ -360,14 +437,19 @@ export class PolicyEngine {
       return false;
     }
 
-    await this.applyAddedEnforcerTargets(
-      currentSnapshot.enforcerTargets,
-      nextSnapshot.enforcerTargets
-    );
-    await this.removeDroppedEnforcerTargets(
-      currentSnapshot.enforcerTargets,
-      nextSnapshot.enforcerTargets
-    );
+    try {
+      await this.applyAddedEnforcerTargets(
+        currentSnapshot.enforcerTargets,
+        nextSnapshot.enforcerTargets
+      );
+      await this.removeDroppedEnforcerTargets(
+        currentSnapshot.enforcerTargets,
+        nextSnapshot.enforcerTargets
+      );
+    } catch (err) {
+      await this.rollbackToSnapshot(currentSnapshot);
+      throw err;
+    }
 
     this.commitPolicySnapshot(nextSnapshot);
     this.bumpPolicyRevision();
@@ -453,6 +535,26 @@ export class PolicyEngine {
     }
   }
 
+  private async rollbackToSnapshot(snapshot: PolicySnapshot): Promise<void> {
+    this.commitPolicySnapshot(snapshot);
+
+    if (!this.enforcer?.isAvailable()) {
+      return;
+    }
+
+    try {
+      await this.enforcer.cleanup();
+    } catch (err) {
+      console.warn(`[policy] Failed to cleanup enforcer during rollback:`, err);
+    }
+
+    try {
+      await this.replayEnforcerTargets(snapshot.enforcerTargets);
+    } catch (err) {
+      console.warn(`[policy] Failed to replay enforcer targets during rollback:`, err);
+    }
+  }
+
   private async replaceRules(
     nextRules: readonly ProtectionRule[],
     options: { persist?: boolean } = {}
@@ -474,14 +576,19 @@ export class PolicyEngine {
     }
 
     if (this.enforcer?.isAvailable()) {
-      await this.applyAddedEnforcerTargets(
-        previousSnapshot.enforcerTargets,
-        nextSnapshot.enforcerTargets
-      );
-      await this.removeDroppedEnforcerTargets(
-        previousSnapshot.enforcerTargets,
-        nextSnapshot.enforcerTargets
-      );
+      try {
+        await this.applyAddedEnforcerTargets(
+          previousSnapshot.enforcerTargets,
+          nextSnapshot.enforcerTargets
+        );
+        await this.removeDroppedEnforcerTargets(
+          previousSnapshot.enforcerTargets,
+          nextSnapshot.enforcerTargets
+        );
+      } catch (err) {
+        await this.rollbackToSnapshot(previousSnapshot);
+        throw err;
+      }
     }
 
     this.commitPolicySnapshot(nextSnapshot);

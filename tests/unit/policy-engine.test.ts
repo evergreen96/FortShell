@@ -430,6 +430,92 @@ describe("PolicyEngine", () => {
     });
   });
 
+  it("imports relative rules from a different stored workspace root into the current workspace", async () => {
+    await engine.setProjectRoot(tmpDir);
+
+    const otherRoot = fs.mkdtempSync(path.join(os.tmpdir(), "ai-ide-other-root-"));
+    const importedPath = path.join(tmpDir, "imports", "secret.txt");
+    fs.mkdirSync(path.dirname(importedPath), { recursive: true });
+    fs.writeFileSync(importedPath, "secret");
+
+    const result = await engine.importWorkspacePolicy({
+      version: 3,
+      workspaceRoot: fs.realpathSync(otherRoot),
+      rules: [
+        {
+          id: "imported-rule",
+          kind: "path",
+          source: "import",
+          targetPath: "imports/secret.txt",
+          createdAt: "2026-04-03T00:00:00.000Z",
+          updatedAt: "2026-04-03T00:00:00.000Z",
+        },
+      ],
+      updatedAt: "2026-04-03T00:00:00.000Z",
+    });
+
+    expect(result).toEqual({ changed: true });
+    expect(engine.isProtected(importedPath)).toBe(true);
+    expect(engine.listRules()).toHaveLength(1);
+    expect(engine.listRules()[0]).toMatchObject({
+      id: "imported-rule",
+      kind: "path",
+      source: "import",
+      targetPath: "imports/secret.txt",
+    });
+    expect(engine.exportWorkspacePolicy()).toMatchObject({
+      workspaceRoot: fs.realpathSync(tmpDir),
+      rules: [
+        expect.objectContaining({
+          id: "imported-rule",
+          targetPath: "imports/secret.txt",
+        }),
+      ],
+    });
+  });
+
+  it("rejects directory rules outside the current workspace", async () => {
+    await engine.setProjectRoot(tmpDir);
+
+    const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), "ai-ide-outside-dir-"));
+
+    const result = await engine.addDirectoryRule(outsideDir);
+
+    expect(result).toEqual({
+      changed: false,
+      reason: "outside-workspace",
+    });
+    expect(engine.listRules()).toEqual([]);
+  });
+
+  it("rejects imported direct targets outside the current workspace", async () => {
+    await engine.setProjectRoot(tmpDir);
+
+    const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), "ai-ide-outside-import-"));
+    const result = await engine.importWorkspacePolicy({
+      version: 3,
+      workspaceRoot: fs.realpathSync(tmpDir),
+      rules: [
+        {
+          id: "outside-rule",
+          kind: "path",
+          source: "import",
+          targetPath: path.join(outsideDir, "secret.txt"),
+          createdAt: "2026-04-03T00:00:00.000Z",
+          updatedAt: "2026-04-03T00:00:00.000Z",
+        },
+      ],
+      updatedAt: "2026-04-03T00:00:00.000Z",
+    });
+
+    expect(result).toEqual({
+      changed: false,
+      reason: "outside-workspace",
+    });
+    expect(engine.listRules()).toEqual([]);
+    expect(engine.listCompiledEntries()).toEqual([]);
+  });
+
   it("replaces the workspace rule set when importing and exports the replacement", async () => {
     await engine.setProjectRoot(tmpDir);
 
@@ -495,6 +581,109 @@ describe("PolicyEngine", () => {
       "cert.pem",
     ]);
     expect(engine.isProtected(certPath)).toBe(true);
+    expect(engine.getPolicyRevision()).toBe(1);
+  });
+
+  it("restores the previous enforcer state when replacing rules fails mid-diff", async () => {
+    await engine.setProjectRoot(tmpDir);
+
+    const originalPath = path.join(tmpDir, "original.txt");
+    const replacementDir = path.join(tmpDir, "replacement");
+    const replacementPath = path.join(replacementDir, "new.txt");
+    fs.mkdirSync(replacementDir);
+    fs.writeFileSync(originalPath, "original");
+    fs.writeFileSync(replacementPath, "replacement");
+
+    const appliedPaths = new Set<string>();
+    const fakeEnforcer: PolicyEnforcer = {
+      applyProtection: async (targetPath) => {
+        appliedPaths.add(targetPath);
+      },
+      removeProtection: async (targetPath) => {
+        if (targetPath === fs.realpathSync(originalPath)) {
+          throw new Error("remove failed");
+        }
+        appliedPaths.delete(targetPath);
+      },
+      isAvailable: () => true,
+      cleanup: async () => {
+        appliedPaths.clear();
+      },
+    };
+    engine.setEnforcer(fakeEnforcer);
+
+    await engine.addPathRule(originalPath);
+    expect(appliedPaths).toEqual(new Set([fs.realpathSync(originalPath)]));
+
+    await expect(
+      engine.importWorkspacePolicy({
+        version: 3,
+        workspaceRoot: path.join(os.tmpdir(), "ai-ide-elsewhere-root"),
+        rules: [
+          {
+            id: "replacement-dir-rule",
+            kind: "directory",
+            source: "import",
+            targetPath: "replacement",
+            createdAt: "2026-04-03T00:00:00.000Z",
+            updatedAt: "2026-04-03T00:00:00.000Z",
+          },
+        ],
+        updatedAt: "2026-04-03T00:00:00.000Z",
+      })
+    ).rejects.toThrow("remove failed");
+    expect(engine.listRules()).toHaveLength(1);
+    expect(engine.listRules()[0]).toMatchObject({
+      kind: "path",
+      targetPath: "original.txt",
+    });
+    expect(engine.isProtected(originalPath)).toBe(true);
+    expect(engine.isProtected(replacementPath)).toBe(false);
+    expect(appliedPaths).toEqual(new Set([fs.realpathSync(originalPath)]));
+  });
+
+  it("restores the previous enforcer state when dynamic recompilation fails mid-diff", async () => {
+    await engine.setProjectRoot(tmpDir);
+
+    const envPath = path.join(tmpDir, ".env");
+    const certPath = path.join(tmpDir, "cert.pem");
+    fs.writeFileSync(envPath, "env");
+    const envRealPath = fs.realpathSync(envPath);
+
+    const appliedPaths = new Set<string>();
+    let removeCount = 0;
+    const fakeEnforcer: PolicyEnforcer = {
+      applyProtection: async (targetPath) => {
+        appliedPaths.add(targetPath);
+      },
+      removeProtection: async (targetPath) => {
+        removeCount += 1;
+        if (removeCount === 1) {
+          throw new Error("recompute remove failed");
+        }
+        appliedPaths.delete(targetPath);
+      },
+      isAvailable: () => true,
+      cleanup: async () => {
+        appliedPaths.clear();
+      },
+    };
+    engine.setEnforcer(fakeEnforcer);
+
+    await engine.applyPreset("env-files");
+    expect(appliedPaths).toContain(fs.realpathSync(envPath));
+
+    await engine.addExtensionRule([".pem"]);
+    fs.writeFileSync(certPath, "cert");
+    fs.rmSync(envPath);
+    await expect(engine.recomputeDynamicRules()).rejects.toThrow(
+      "recompute remove failed"
+    );
+    expect(engine.listCompiledEntries().map((entry) => entry.path)).toEqual([
+      envRealPath,
+    ]);
+    expect(engine.isProtected(certPath)).toBe(false);
+    expect(appliedPaths).toEqual(new Set([envRealPath]));
     expect(engine.getPolicyRevision()).toBe(1);
   });
 

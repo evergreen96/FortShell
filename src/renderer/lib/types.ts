@@ -13,6 +13,10 @@ export type WorkspaceSearchResult = {
   isDirectory: boolean;
 };
 
+export type ProtectionCompiledEntryType = "file" | "directory";
+
+export type ProtectionCompiledEntryStatus = "shielded";
+
 export type ProtectionRuleKind = "path" | "directory" | "extension" | "preset";
 
 export type ProtectionRuleSource = "manual" | "directory" | "extension" | "preset" | "import";
@@ -71,6 +75,9 @@ export type ProtectionRule =
   | ProtectionPresetRuleRef;
 
 export type CompiledProtectionEntry = WorkspaceSearchResult & {
+  type: ProtectionCompiledEntryType;
+  status: ProtectionCompiledEntryStatus;
+  canRemoveDirectly: boolean;
   sourceRuleId: string;
   sourceKind: ProtectionRuleKind;
   sourceLabel: string;
