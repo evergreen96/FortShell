@@ -16,6 +16,14 @@ type PolicyEngineOptions = {
   policyStoreDir?: string;
 };
 
+type PolicySnapshot = {
+  compiledEntries: CompiledProtectionEntry[];
+  enforcerTargets: string[];
+  protectedDirectories: Set<string>;
+  protectedPaths: Set<string>;
+  rules: ProtectionRule[];
+};
+
 function isRelativeToRoot(rootPath: string, candidatePath: string): boolean {
   const relative = path.relative(rootPath, candidatePath);
   return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
@@ -125,19 +133,24 @@ export class PolicyEngine {
     }
 
     const previousContext = this.getEffectivePolicyContext();
-    const previousEnforcerTargets = this.getEnforcerTargets();
-
-    this.rules.push({
+    const previousEnforcerTargets = this.getEnforcerTargetsForRules(this.rules, this.compiledEntries);
+    const nextRule: ProtectionRule = {
       id: crypto.randomUUID(),
       kind: isDirectoryPath(normalized) ? "directory" : "path",
       source: "manual",
       targetPath: toStoredTargetPath(this.projectRoot, normalized),
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-    });
-    this.recompileEffectivePolicy();
+    };
+    const nextRules = [
+      ...this.rules,
+      nextRule,
+    ];
+    const nextState = this.buildPolicySnapshot(nextRules);
 
-    await this.applyAddedEnforcerTargets(previousEnforcerTargets);
+    await this.applyAddedEnforcerTargets(previousEnforcerTargets, nextState.enforcerTargets);
+
+    this.commitPolicySnapshot(nextState);
 
     if (previousContext !== this.getEffectivePolicyContext()) {
       this.bumpPolicyRevision();
@@ -154,12 +167,12 @@ export class PolicyEngine {
     }
 
     const previousContext = this.getEffectivePolicyContext();
-    const previousEnforcerTargets = this.getEnforcerTargets();
+    const previousEnforcerTargets = this.getEnforcerTargetsForRules(this.rules, this.compiledEntries);
+    const nextState = this.buildPolicySnapshot(nextRules);
 
-    this.rules = nextRules;
-    this.recompileEffectivePolicy();
+    await this.removeDroppedEnforcerTargets(previousEnforcerTargets, nextState.enforcerTargets);
 
-    await this.removeDroppedEnforcerTargets(previousEnforcerTargets);
+    this.commitPolicySnapshot(nextState);
 
     if (previousContext !== this.getEffectivePolicyContext()) {
       this.bumpPolicyRevision();
@@ -232,13 +245,7 @@ export class PolicyEngine {
   }
 
   list(): string[] {
-    return this.rules
-      .filter(
-        (rule) =>
-          rule.source === "manual" && (rule.kind === "path" || rule.kind === "directory")
-      )
-      .map((rule) => resolveRuleTargetPath(this.projectRoot, rule))
-      .filter((entry): entry is string => Boolean(entry));
+    return Array.from(this.protectedPaths).sort();
   }
 
   async cleanup(): Promise<void> {
@@ -266,65 +273,95 @@ export class PolicyEngine {
 
     try {
       this.rules = loadWorkspacePolicy(this.projectRoot, this.policyStoreDir);
-      this.recompileEffectivePolicy();
+      this.commitPolicySnapshot(this.buildPolicySnapshot(this.rules));
     } catch (err) {
       console.warn(`[policy] Failed to load policy:`, err);
     }
   }
 
-  private recompileEffectivePolicy(): void {
-    this.compiledEntries = [];
-    this.protectedPaths = new Set();
-    this.protectedDirectories = new Set();
+  private buildPolicySnapshot(rules: ProtectionRule[]): PolicySnapshot {
+    const compiledEntries: CompiledProtectionEntry[] = [];
+    const protectedPaths = new Set<string>();
+    const protectedDirectories = new Set<string>();
+    const normalizedRules = rules.map((rule) => cloneRule(rule));
 
-    for (const rule of this.rules) {
+    for (const rule of normalizedRules) {
       const directTarget = resolveRuleTargetPath(this.projectRoot, rule);
       if (!directTarget) continue;
 
-      this.protectedPaths.add(directTarget);
+      protectedPaths.add(directTarget);
       if (rule.kind === "directory") {
-        this.protectedDirectories.add(directTarget);
+        protectedDirectories.add(directTarget);
       }
     }
 
     if (!this.projectRoot) {
-      return;
+      return {
+        compiledEntries,
+        enforcerTargets: this.getEnforcerTargetsForRules(normalizedRules, compiledEntries),
+        protectedDirectories,
+        protectedPaths,
+        rules: normalizedRules,
+      };
     }
 
     try {
-      this.compiledEntries = compileProtectionRules({
+      compiledEntries.push(...compileProtectionRules({
         workspaceRoot: this.projectRoot,
-        rules: this.rules,
+        rules: normalizedRules,
         presetCatalog: BUILT_IN_PRESETS,
         workspaceEntries: buildWorkspaceEntries(this.projectRoot),
-      });
+      }));
     } catch (err) {
       console.warn(`[policy] Failed to compile protection rules:`, err);
-      this.compiledEntries = [];
-      return;
+      return {
+        compiledEntries: [],
+        enforcerTargets: this.getEnforcerTargetsForRules(normalizedRules, []),
+        protectedDirectories,
+        protectedPaths,
+        rules: normalizedRules,
+      };
     }
 
-    for (const entry of this.compiledEntries) {
+    for (const entry of compiledEntries) {
       const normalizedPath = resolveRealPath(entry.path);
-      this.protectedPaths.add(normalizedPath);
+      protectedPaths.add(normalizedPath);
       if (entry.isDirectory) {
-        this.protectedDirectories.add(normalizedPath);
+        protectedDirectories.add(normalizedPath);
       }
     }
+
+    return {
+      compiledEntries,
+      enforcerTargets: this.getEnforcerTargetsForRules(normalizedRules, compiledEntries),
+      protectedDirectories,
+      protectedPaths,
+      rules: normalizedRules,
+    };
   }
 
-  private getEnforcerTargets(): string[] {
-    const targets = new Set<string>();
-    const ruleById = new Map(this.rules.map((rule) => [rule.id, rule]));
+  private commitPolicySnapshot(snapshot: PolicySnapshot): void {
+    this.rules = snapshot.rules;
+    this.compiledEntries = snapshot.compiledEntries;
+    this.protectedPaths = snapshot.protectedPaths;
+    this.protectedDirectories = snapshot.protectedDirectories;
+  }
 
-    for (const rule of this.rules) {
+  private getEnforcerTargetsForRules(
+    rules: readonly ProtectionRule[],
+    compiledEntries: readonly CompiledProtectionEntry[]
+  ): string[] {
+    const targets = new Set<string>();
+    const ruleById = new Map(rules.map((rule) => [rule.id, rule]));
+
+    for (const rule of rules) {
       const directTarget = resolveRuleTargetPath(this.projectRoot, rule);
       if (directTarget) {
         targets.add(directTarget);
       }
     }
 
-    for (const entry of this.compiledEntries) {
+    for (const entry of compiledEntries) {
       const sourceRule = ruleById.get(entry.sourceRuleId);
       if (!sourceRule) continue;
       if (sourceRule.kind === "path" || sourceRule.kind === "directory") {
@@ -342,7 +379,7 @@ export class PolicyEngine {
       return;
     }
 
-    for (const protectedPath of this.getEnforcerTargets()) {
+    for (const protectedPath of this.getEnforcerTargetsForRules(this.rules, this.compiledEntries)) {
       try {
         await this.enforcer.applyProtection(protectedPath);
       } catch (err) {
@@ -351,13 +388,16 @@ export class PolicyEngine {
     }
   }
 
-  private async applyAddedEnforcerTargets(previousTargets: string[]): Promise<void> {
+  private async applyAddedEnforcerTargets(
+    previousTargets: string[],
+    nextTargets: string[]
+  ): Promise<void> {
     if (!this.enforcer?.isAvailable()) {
       return;
     }
 
     const previous = new Set(previousTargets);
-    for (const protectedPath of this.getEnforcerTargets()) {
+    for (const protectedPath of nextTargets) {
       if (previous.has(protectedPath)) {
         continue;
       }
@@ -366,12 +406,15 @@ export class PolicyEngine {
     }
   }
 
-  private async removeDroppedEnforcerTargets(previousTargets: string[]): Promise<void> {
+  private async removeDroppedEnforcerTargets(
+    previousTargets: string[],
+    nextTargets: string[]
+  ): Promise<void> {
     if (!this.enforcer?.isAvailable()) {
       return;
     }
 
-    const next = new Set(this.getEnforcerTargets());
+    const next = new Set(nextTargets);
     for (const protectedPath of previousTargets) {
       if (next.has(protectedPath)) {
         continue;

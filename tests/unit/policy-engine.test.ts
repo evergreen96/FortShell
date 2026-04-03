@@ -209,6 +209,86 @@ describe("PolicyEngine", () => {
     expect(await engine.removeRule(rules[0].id)).toBe(false);
   });
 
+  it("does not mutate state when addPathRule enforcer application fails", async () => {
+    await engine.setProjectRoot(tmpDir);
+
+    const filePath = path.join(tmpDir, "blocked.txt");
+    fs.writeFileSync(filePath, "secret");
+
+    engine.setEnforcer({
+      applyProtection: async () => {
+        throw new Error("apply failed");
+      },
+      removeProtection: async () => {},
+      isAvailable: () => true,
+      cleanup: async () => {},
+    });
+
+    await expect(engine.addPathRule(filePath)).rejects.toThrow("apply failed");
+    expect(engine.isProtected(filePath)).toBe(false);
+    expect(engine.listRules()).toEqual([]);
+    expect(engine.list()).toEqual([]);
+    expect(engine.getPolicyRevision()).toBe(0);
+    expect(fs.existsSync(getWorkspacePolicyPath(tmpDir, policyStoreDir))).toBe(false);
+  });
+
+  it("does not mutate state when removeRule enforcer removal fails", async () => {
+    await engine.setProjectRoot(tmpDir);
+
+    const filePath = path.join(tmpDir, "blocked-remove.txt");
+    fs.writeFileSync(filePath, "secret");
+
+    await engine.addPathRule(filePath);
+    const [rule] = engine.listRules();
+
+    engine.setEnforcer({
+      applyProtection: async () => {},
+      removeProtection: async () => {
+        throw new Error("remove failed");
+      },
+      isAvailable: () => true,
+      cleanup: async () => {},
+    });
+
+    await expect(engine.removeRule(rule.id)).rejects.toThrow("remove failed");
+    expect(engine.isProtected(filePath)).toBe(true);
+    expect(engine.listRules()).toHaveLength(1);
+    expect(engine.listRules()[0]).toMatchObject({ id: rule.id });
+    expect(engine.list()).toContain(fs.realpathSync(filePath));
+    expect(engine.getPolicyRevision()).toBe(1);
+  });
+
+  it("lists effective compiled protections for rule-based policies", async () => {
+    const envPath = path.join(tmpDir, ".env");
+    fs.writeFileSync(envPath, "secret");
+
+    const policyPath = getWorkspacePolicyPath(tmpDir, policyStoreDir);
+    fs.mkdirSync(path.dirname(policyPath), { recursive: true });
+    fs.writeFileSync(
+      policyPath,
+      JSON.stringify({
+        version: 3,
+        workspaceRoot: fs.realpathSync(tmpDir),
+        rules: [
+          {
+            id: "rule-preset-env",
+            kind: "preset",
+            source: "preset",
+            presetId: "env-files",
+            createdAt: "2026-04-03T00:00:00.000Z",
+            updatedAt: "2026-04-03T00:00:00.000Z",
+          },
+        ],
+        updatedAt: "2026-04-03T00:00:00.000Z",
+      }),
+      "utf-8"
+    );
+
+    await engine.setProjectRoot(tmpDir);
+
+    expect(engine.list()).toContain(fs.realpathSync(envPath));
+  });
+
   it("should not duplicate protections", async () => {
     const filePath = path.join(tmpDir, "file.txt");
     fs.writeFileSync(filePath, "data");
