@@ -4,6 +4,7 @@ import {
   getLegacyPolicyPath,
   getWorkspacePolicyPath,
 } from "../../src/main/core/config/policy-store";
+import type { PolicyEnforcer } from "../../src/main/platform/types";
 import fs from "fs";
 import path from "path";
 import os from "os";
@@ -137,6 +138,77 @@ describe("PolicyEngine", () => {
     });
   });
 
+  it("re-applies compiled non-manual protections when a workspace is reloaded", async () => {
+    const filePath = path.join(tmpDir, ".env");
+    fs.writeFileSync(filePath, "secret");
+
+    const appliedPaths: string[] = [];
+    const fakeEnforcer: PolicyEnforcer = {
+      applyProtection: async (targetPath) => {
+        appliedPaths.push(targetPath);
+      },
+      removeProtection: async () => {},
+      isAvailable: () => true,
+      cleanup: async () => {},
+    };
+    engine.setEnforcer(fakeEnforcer);
+
+    const policyPath = getWorkspacePolicyPath(tmpDir, policyStoreDir);
+    fs.mkdirSync(path.dirname(policyPath), { recursive: true });
+    fs.writeFileSync(
+      policyPath,
+      JSON.stringify({
+        version: 3,
+        workspaceRoot: fs.realpathSync(tmpDir),
+        rules: [
+          {
+            id: "rule-preset-env",
+            kind: "preset",
+            source: "preset",
+            presetId: "env-files",
+            createdAt: "2026-04-03T00:00:00.000Z",
+            updatedAt: "2026-04-03T00:00:00.000Z",
+          },
+        ],
+        updatedAt: "2026-04-03T00:00:00.000Z",
+      }),
+      "utf-8"
+    );
+
+    await engine.setProjectRoot(tmpDir);
+
+    expect(appliedPaths).toContain(fs.realpathSync(filePath));
+  });
+
+  it("adds and removes manual path rules through the rule APIs", async () => {
+    await engine.setProjectRoot(tmpDir);
+
+    const filePath = path.join(tmpDir, "api.key");
+    fs.writeFileSync(filePath, "secret");
+
+    const addResult = await engine.addPathRule(filePath);
+    expect(addResult).toEqual({ changed: true });
+    expect(engine.isProtected(filePath)).toBe(true);
+
+    const rules = engine.listRules();
+    expect(rules).toHaveLength(1);
+    expect(rules[0]).toMatchObject({
+      kind: "path",
+      source: "manual",
+      targetPath: "api.key",
+    });
+
+    expect(await engine.addPathRule(filePath)).toEqual({
+      changed: false,
+      reason: "already-protected",
+    });
+
+    expect(await engine.removeRule(rules[0].id)).toBe(true);
+    expect(engine.isProtected(filePath)).toBe(false);
+    expect(engine.listRules()).toEqual([]);
+    expect(await engine.removeRule(rules[0].id)).toBe(false);
+  });
+
   it("should not duplicate protections", async () => {
     const filePath = path.join(tmpDir, "file.txt");
     fs.writeFileSync(filePath, "data");
@@ -238,6 +310,25 @@ describe("PolicyEngine", () => {
     expect(engine.isProtected(filePath)).toBe(true);
     expect(fs.existsSync(getWorkspacePolicyPath(tmpDir, policyStoreDir))).toBe(true);
     expect(fs.existsSync(legacyPath)).toBe(false);
+
+    const migratedPolicy = JSON.parse(
+      fs.readFileSync(getWorkspacePolicyPath(tmpDir, policyStoreDir), "utf-8")
+    );
+    expect(migratedPolicy).toMatchObject({
+      version: 3,
+      workspaceRoot: fs.realpathSync(tmpDir),
+      rules: [
+        {
+          kind: "path",
+          source: "manual",
+          targetPath: "secret.txt",
+          createdAt: expect.any(String),
+          updatedAt: expect.any(String),
+        },
+      ],
+      updatedAt: expect.any(String),
+    });
+    expect(migratedPolicy.protected).toBeUndefined();
   });
 
   it("migrates version 2 workspace policy files into manual path rules on load", async () => {

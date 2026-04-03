@@ -118,6 +118,57 @@ export class PolicyEngine {
     return this.policyRevision;
   }
 
+  async addPathRule(filePath: string): Promise<{ changed: boolean; reason?: string }> {
+    const normalized = resolveRealPath(filePath);
+    if (this.isProtected(normalized)) {
+      return { changed: false, reason: "already-protected" };
+    }
+
+    const previousContext = this.getEffectivePolicyContext();
+    const previousEnforcerTargets = this.getEnforcerTargets();
+
+    this.rules.push({
+      id: crypto.randomUUID(),
+      kind: isDirectoryPath(normalized) ? "directory" : "path",
+      source: "manual",
+      targetPath: toStoredTargetPath(this.projectRoot, normalized),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    this.recompileEffectivePolicy();
+
+    await this.applyAddedEnforcerTargets(previousEnforcerTargets);
+
+    if (previousContext !== this.getEffectivePolicyContext()) {
+      this.bumpPolicyRevision();
+    }
+
+    this.save();
+    return { changed: true };
+  }
+
+  async removeRule(ruleId: string): Promise<boolean> {
+    const nextRules = this.rules.filter((rule) => rule.id !== ruleId);
+    if (nextRules.length === this.rules.length) {
+      return false;
+    }
+
+    const previousContext = this.getEffectivePolicyContext();
+    const previousEnforcerTargets = this.getEnforcerTargets();
+
+    this.rules = nextRules;
+    this.recompileEffectivePolicy();
+
+    await this.removeDroppedEnforcerTargets(previousEnforcerTargets);
+
+    if (previousContext !== this.getEffectivePolicyContext()) {
+      this.bumpPolicyRevision();
+    }
+
+    this.save();
+    return true;
+  }
+
   listRules(): ProtectionRule[] {
     return this.rules.map((rule) => cloneRule(rule));
   }
@@ -145,70 +196,26 @@ export class PolicyEngine {
       this.bumpPolicyRevision();
     }
 
-    if (this.enforcer?.isAvailable()) {
-      for (const protectedPath of this.list()) {
-        try {
-          await this.enforcer.applyProtection(protectedPath);
-        } catch (err) {
-          console.warn(`[policy] Failed to re-apply protection for ${protectedPath}:`, err);
-        }
-      }
-    }
+    await this.applyAllEnforcerTargets();
   }
 
   async protect(filePath: string): Promise<boolean> {
-    const normalized = resolveRealPath(filePath);
-    if (this.isProtected(normalized)) return false;
-
-    if (this.enforcer?.isAvailable()) {
-      await this.enforcer.applyProtection(normalized);
-    }
-
-    const previousContext = this.getEffectivePolicyContext();
-    this.rules.push({
-      id: crypto.randomUUID(),
-      kind: isDirectoryPath(normalized) ? "directory" : "path",
-      source: "manual",
-      targetPath: toStoredTargetPath(this.projectRoot, normalized),
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    });
-    this.recompileEffectivePolicy();
-
-    if (previousContext !== this.getEffectivePolicyContext()) {
-      this.bumpPolicyRevision();
-    }
-
-    this.save();
-    return true;
+    const result = await this.addPathRule(filePath);
+    return result.changed;
   }
 
   async unprotect(filePath: string): Promise<boolean> {
     const normalized = resolveRealPath(filePath);
-    const nextRules = this.rules.filter((rule) => {
-      if (rule.source !== "manual") {
-        return true;
-      }
-
-      return resolveRuleTargetPath(this.projectRoot, rule) !== normalized;
-    });
-
-    if (nextRules.length === this.rules.length) return false;
-
-    if (this.enforcer?.isAvailable()) {
-      await this.enforcer.removeProtection(normalized);
+    const manualRule = this.rules.find(
+      (rule) =>
+        rule.source === "manual" &&
+        resolveRuleTargetPath(this.projectRoot, rule) === normalized
+    );
+    if (!manualRule) {
+      return false;
     }
 
-    const previousContext = this.getEffectivePolicyContext();
-    this.rules = nextRules;
-    this.recompileEffectivePolicy();
-
-    if (previousContext !== this.getEffectivePolicyContext()) {
-      this.bumpPolicyRevision();
-    }
-
-    this.save();
-    return true;
+    return this.removeRule(manualRule.id);
   }
 
   isProtected(filePath: string): boolean {
@@ -303,6 +310,74 @@ export class PolicyEngine {
       if (entry.isDirectory) {
         this.protectedDirectories.add(normalizedPath);
       }
+    }
+  }
+
+  private getEnforcerTargets(): string[] {
+    const targets = new Set<string>();
+    const ruleById = new Map(this.rules.map((rule) => [rule.id, rule]));
+
+    for (const rule of this.rules) {
+      const directTarget = resolveRuleTargetPath(this.projectRoot, rule);
+      if (directTarget) {
+        targets.add(directTarget);
+      }
+    }
+
+    for (const entry of this.compiledEntries) {
+      const sourceRule = ruleById.get(entry.sourceRuleId);
+      if (!sourceRule) continue;
+      if (sourceRule.kind === "path" || sourceRule.kind === "directory") {
+        continue;
+      }
+
+      targets.add(resolveRealPath(entry.path));
+    }
+
+    return Array.from(targets).sort();
+  }
+
+  private async applyAllEnforcerTargets(): Promise<void> {
+    if (!this.enforcer?.isAvailable()) {
+      return;
+    }
+
+    for (const protectedPath of this.getEnforcerTargets()) {
+      try {
+        await this.enforcer.applyProtection(protectedPath);
+      } catch (err) {
+        console.warn(`[policy] Failed to re-apply protection for ${protectedPath}:`, err);
+      }
+    }
+  }
+
+  private async applyAddedEnforcerTargets(previousTargets: string[]): Promise<void> {
+    if (!this.enforcer?.isAvailable()) {
+      return;
+    }
+
+    const previous = new Set(previousTargets);
+    for (const protectedPath of this.getEnforcerTargets()) {
+      if (previous.has(protectedPath)) {
+        continue;
+      }
+
+      await this.enforcer.applyProtection(protectedPath);
+    }
+  }
+
+  private async removeDroppedEnforcerTargets(previousTargets: string[]): Promise<void> {
+    if (!this.enforcer?.isAvailable()) {
+      return;
+    }
+
+    const next = new Set(this.getEnforcerTargets());
+    for (const protectedPath of previousTargets) {
+      if (next.has(protectedPath)) {
+        continue;
+      }
+
+      await this.enforcer.removeProtection(protectedPath);
     }
   }
 
