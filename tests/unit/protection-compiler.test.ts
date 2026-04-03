@@ -76,4 +76,40 @@ describe("compileProtectionRules", () => {
       "secrets/nested/api.key",
     ]);
   });
+
+  it("includes workspace children for a root-level directory rule", () => {
+    const entries = compileProtectionRules({
+      workspaceRoot: "/repo",
+      rules: [
+        { id: "dir-root", kind: "directory", source: "directory", targetPath: "/repo" },
+      ],
+      presetCatalog: BUILT_IN_PRESETS,
+      workspaceEntries: [
+        { path: "/repo/.env", relativePath: ".env", name: ".env", ext: "", isDirectory: false },
+        { path: "/repo/src", relativePath: "src", name: "src", ext: "", isDirectory: true },
+        { path: "/repo/src/app.ts", relativePath: "src/app.ts", name: "app.ts", ext: ".ts", isDirectory: false },
+      ],
+    });
+
+    expect(entries.map((entry) => entry.relativePath)).toEqual([
+      ".env",
+      "src",
+      "src/app.ts",
+    ]);
+  });
+
+  it("throws when a preset rule references an unknown preset id", () => {
+    expect(() =>
+      compileProtectionRules({
+        workspaceRoot: "/repo",
+        rules: [
+          { id: "preset-missing", kind: "preset", source: "preset", presetId: "env-files-does-not-exist" as never },
+        ],
+        presetCatalog: BUILT_IN_PRESETS,
+        workspaceEntries: [
+          { path: "/repo/.env", relativePath: ".env", name: ".env", ext: "", isDirectory: false },
+        ],
+      })
+    ).toThrow("Unknown protection preset: env-files-does-not-exist");
+  });
 });

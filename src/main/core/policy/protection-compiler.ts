@@ -56,6 +56,10 @@ function matchesDirectoryRule(
     return false;
   }
 
+  if (normalizedTarget === ".") {
+    return true;
+  }
+
   return (
     entry.relativePath === normalizedTarget ||
     entry.relativePath.startsWith(`${normalizedTarget}/`)
@@ -122,7 +126,7 @@ function compileRuleEntries(
     } else {
       const preset = getProtectionPresetById(rule.presetId, presetCatalog);
       if (!preset) {
-        continue;
+        throw new Error(`Unknown protection preset: ${rule.presetId}`);
       }
 
       matches = preset.rules.some((presetRule) =>
