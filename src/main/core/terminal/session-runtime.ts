@@ -23,6 +23,7 @@ export type TerminalSessionRuntime = {
   staleReason?: "policy-changed";
   launchFailureReason?: string;
   launchFailureDetail?: string;
+  launchRetryable?: boolean;
 };
 
 export function createSessionRuntime(input: {
@@ -92,5 +93,6 @@ export function markLaunchFailed(input: {
     startedAt: new Date().toISOString(),
     launchFailureReason: input.launchFailureReason,
     launchFailureDetail: input.launchFailureDetail,
+    launchRetryable: true,
   };
 }

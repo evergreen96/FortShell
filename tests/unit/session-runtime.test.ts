@@ -53,5 +53,6 @@ describe("session runtime trust model", () => {
     expect(runtime.trustState).toBe("launch-failed");
     expect(runtime.launchMode).toBe("launch-failed");
     expect(runtime.launchFailureReason).toBe("spawn failed");
+    expect(runtime.launchRetryable).toBe(true);
   });
 });
