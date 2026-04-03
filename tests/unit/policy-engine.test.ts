@@ -138,6 +138,25 @@ describe("PolicyEngine", () => {
     });
   });
 
+  it("removes a protection rule by id", async () => {
+    await engine.setProjectRoot(tmpDir);
+
+    const filePath = path.join(tmpDir, ".env");
+    fs.writeFileSync(filePath, "secret");
+
+    const applied = await engine.applyPreset("env-files");
+    expect(applied.changed).toBe(true);
+
+    const presetRuleId = engine.listRules()[0]?.id;
+    expect(typeof presetRuleId).toBe("string");
+
+    const removed = await engine.removeRule(presetRuleId!);
+
+    expect(removed).toBe(true);
+    expect(engine.listRules()).toHaveLength(0);
+    expect(engine.isProtected(filePath)).toBe(false);
+  });
+
   it("re-applies compiled non-manual protections when a workspace is reloaded", async () => {
     const filePath = path.join(tmpDir, ".env");
     fs.writeFileSync(filePath, "secret");

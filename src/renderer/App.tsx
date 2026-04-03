@@ -16,6 +16,9 @@ import {
   type TerminalTabState,
 } from "./lib/terminalSessionState";
 import type {
+  CompiledProtectionEntry,
+  ProtectionMutationResult,
+  ProtectionRule,
   ShellProfile,
   TerminalSessionMeta,
   TerminalSessionReplacement,
@@ -136,6 +139,9 @@ export function App() {
   const [layoutMode, setLayoutMode] = useState<TerminalLayoutMode>("horizontal");
   const [workspacePath, setWorkspacePath] = useState<string | null>(null);
   const [protectedPaths, setProtectedPaths] = useState<Set<string>>(new Set());
+  const [protectionRules, setProtectionRules] = useState<ProtectionRule[]>([]);
+  const [compiledProtections, setCompiledProtections] = useState<CompiledProtectionEntry[]>([]);
+  const [focusedSourceRuleId, setFocusedSourceRuleId] = useState<string | null>(null);
   const [sidebarVisible, setSidebarVisible] = useState(true);
   const [sidebarWidth, setSidebarWidth] = useState(250);
   const [showSettings, setShowSettings] = useState(false);
@@ -217,6 +223,25 @@ export function App() {
     return unlisten;
   }, []);
 
+  const refreshProtectionState = useCallback(async () => {
+    if (!workspacePath) {
+      setProtectedPaths(new Set());
+      setProtectionRules([]);
+      setCompiledProtections([]);
+      return;
+    }
+
+    const [paths, rules, compiled] = await Promise.all([
+      window.electronAPI.policyList(),
+      window.electronAPI.protectionListRules(),
+      window.electronAPI.protectionListCompiled(),
+    ]);
+
+    setProtectedPaths(new Set(paths));
+    setProtectionRules(rules);
+    setCompiledProtections(compiled);
+  }, [workspacePath]);
+
   useEffect(() => {
     setTerminals((prev) => {
       const next = [...prev];
@@ -244,35 +269,29 @@ export function App() {
   }, [sessionState.sessions]);
 
   useEffect(() => {
-    if (workspacePath) {
-      window.electronAPI.policyList().then((paths) => {
-        setProtectedPaths(new Set(paths));
-      });
-    }
-  }, [workspacePath]);
+    refreshProtectionState();
+  }, [refreshProtectionState]);
 
-  // Listen for policy changes and refresh protected paths shown in the tree.
+  // Listen for policy changes and refresh protection state shown in the tree and console.
   useEffect(() => {
     const unlisten = window.electronAPI.onPolicyChanged(() => {
-      if (!workspacePath) {
-        return;
-      }
-
-      window.electronAPI.policyList().then((paths) => {
-        setProtectedPaths(new Set(paths));
-      });
+      refreshProtectionState();
     });
     return unlisten;
-  }, [workspacePath]);
+  }, [refreshProtectionState]);
 
   async function openFolder() {
     const path = await window.electronAPI.openFolder();
-    if (path) setWorkspacePath(path);
+    if (path) {
+      setWorkspacePath(path);
+      setFocusedSourceRuleId(null);
+    }
   }
 
   async function handleSelectRecent(path: string) {
     const resolvedPath = await window.electronAPI.workspaceSetRoot(path);
     setWorkspacePath(resolvedPath);
+    setFocusedSourceRuleId(null);
   }
 
   const createTerminal = useCallback(
@@ -394,40 +413,55 @@ export function App() {
 
   async function handleProtect(filePath: string) {
     const changed = await window.electronAPI.policySet(filePath);
-    // Refresh from engine to get realpath-resolved paths
-    const paths = await window.electronAPI.policyList();
-    setProtectedPaths(new Set(paths));
+    await refreshProtectionState();
     showToast(changed ? "Path protected" : "Path already protected");
   }
 
   async function handleUnprotect(filePath: string) {
     const changed = await window.electronAPI.policyRemove(filePath);
-    const paths = await window.electronAPI.policyList();
-    setProtectedPaths(new Set(paths));
+    await refreshProtectionState();
     showToast(changed ? "Path unprotected" : "Path was not protected");
   }
 
-  async function handleProtectMany(filePaths: string[]): Promise<number> {
-    const uniquePaths = Array.from(new Set(filePaths));
-    if (uniquePaths.length === 0) return 0;
+  async function handleApplyPreset(
+    presetId: Parameters<typeof window.electronAPI.protectionApplyPreset>[0]
+  ): Promise<ProtectionMutationResult> {
+    const result = await window.electronAPI.protectionApplyPreset(presetId);
+    await refreshProtectionState();
+    showToast(result.changed ? "Preset applied" : "Preset already applied");
+    return result;
+  }
 
-    const results = await Promise.all(
-      uniquePaths.map(async (filePath) => {
-        try {
-          return await window.electronAPI.policySet(filePath);
-        } catch {
-          return false;
-        }
-      })
-    );
+  async function handleAddExtensionRule(
+    extensions: string[]
+  ): Promise<ProtectionMutationResult> {
+    const result = await window.electronAPI.protectionAddExtensionRule(extensions);
+    await refreshProtectionState();
+    showToast(result.changed ? "Batch rule added" : "Batch rule already active");
+    return result;
+  }
 
-    const protectedCount = results.filter(Boolean).length;
-    if (protectedCount > 0) {
-      const paths = await window.electronAPI.policyList();
-      setProtectedPaths(new Set(paths));
+  async function handleAddManualRule(targetPath: string): Promise<boolean> {
+    const changed = await window.electronAPI.policySet(targetPath);
+    await refreshProtectionState();
+    showToast(changed ? "Direct rule added" : "Path already protected");
+    return changed;
+  }
+
+  async function handleRemoveProtectionRule(ruleId: string): Promise<boolean> {
+    const removed = await window.electronAPI.protectionRemoveRule(ruleId);
+    if (removed) {
+      await refreshProtectionState();
     }
+    showToast(removed ? "Rule removed" : "Rule not found");
+    return removed;
+  }
 
-    return protectedCount;
+  function handleFocusSource(ruleId: string) {
+    setFocusedSourceRuleId(null);
+    window.setTimeout(() => {
+      setFocusedSourceRuleId(ruleId);
+    }, 0);
   }
 
   // Sidebar drag resize
@@ -706,8 +740,8 @@ export function App() {
             onClick={() => setSidebarTab("protection")}
           >
             <ProtectionRailIcon />
-            {protectedPaths.size > 0 && (
-              <span className="nav-rail-badge">{protectedPaths.size}</span>
+            {compiledProtections.length > 0 && (
+              <span className="nav-rail-badge">{compiledProtections.length}</span>
             )}
           </button>
         </aside>
@@ -743,10 +777,15 @@ export function App() {
           ) : (
             <ProtectionCenter
               rootPath={workspacePath}
-              protectedPaths={protectedPaths}
-              onProtect={handleProtect}
-              onProtectMany={handleProtectMany}
-              onUnprotect={handleUnprotect}
+              rules={protectionRules}
+              compiledEntries={compiledProtections}
+              focusedSourceRuleId={focusedSourceRuleId}
+              onApplyPreset={handleApplyPreset}
+              onAddExtensionRule={handleAddExtensionRule}
+              onAddManualPath={handleAddManualRule}
+              onRemoveRule={handleRemoveProtectionRule}
+              onFocusSource={handleFocusSource}
+              onClearFocusedSource={() => setFocusedSourceRuleId(null)}
             />
           )}
         </main>

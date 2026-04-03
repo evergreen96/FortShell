@@ -141,6 +141,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("protection:add-extension-rule", extensions),
   protectionAddDirectoryRule: (targetPath: string) =>
     ipcRenderer.invoke("protection:add-directory-rule", targetPath),
+  protectionRemoveRule: (ruleId: string) =>
+    ipcRenderer.invoke("protection:remove-rule", ruleId) as Promise<boolean>,
   protectionImport: (filePath: string) =>
     ipcRenderer.invoke("protection:import", filePath),
   protectionExport: () =>

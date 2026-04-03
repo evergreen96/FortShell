@@ -297,6 +297,20 @@ export function registerIpcHandlers(
     }
   });
 
+  safeHandle("protection:remove-rule", async (_event, ruleId: string) => {
+    const previousRevision = policyEngine.getPolicyRevision();
+    try {
+      const result = await policyEngine.removeRule(ruleId);
+      if (result) {
+        notifyPolicyMutation(ptyManager, policyEngine, previousRevision);
+      }
+      return result;
+    } catch (err) {
+      notifyPolicyMutationIfChanged(ptyManager, policyEngine, previousRevision);
+      throw err;
+    }
+  });
+
   safeHandle("protection:import", async (_event, filePath: string) => {
     const raw = fs.readFileSync(filePath, "utf-8");
     const parsedData = JSON.parse(raw);

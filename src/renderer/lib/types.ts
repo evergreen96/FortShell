@@ -90,6 +90,11 @@ export type ProtectionWorkspacePolicy = {
   updatedAt: string;
 };
 
+export type ProtectionMutationResult = {
+  changed: boolean;
+  reason?: string;
+};
+
 export type TerminalTrustState =
   | "protected"
   | "unprotected"
@@ -192,18 +197,11 @@ export type ElectronAPI = {
   onPolicyChanged: (callback: () => void) => () => void;
   protectionListRules: () => Promise<ProtectionRule[]>;
   protectionListCompiled: () => Promise<CompiledProtectionEntry[]>;
-  protectionApplyPreset: (
-    presetId: ProtectionPresetId
-  ) => Promise<{ changed: boolean; reason?: string }>;
-  protectionAddExtensionRule: (
-    extensions: string[]
-  ) => Promise<{ changed: boolean; reason?: string }>;
-  protectionAddDirectoryRule: (
-    targetPath: string
-  ) => Promise<{ changed: boolean; reason?: string }>;
-  protectionImport: (
-    filePath: string
-  ) => Promise<{ changed: boolean; reason?: string }>;
+  protectionApplyPreset: (presetId: ProtectionPresetId) => Promise<ProtectionMutationResult>;
+  protectionAddExtensionRule: (extensions: string[]) => Promise<ProtectionMutationResult>;
+  protectionAddDirectoryRule: (targetPath: string) => Promise<ProtectionMutationResult>;
+  protectionRemoveRule: (ruleId: string) => Promise<boolean>;
+  protectionImport: (filePath: string) => Promise<ProtectionMutationResult>;
   protectionExport: () => Promise<ProtectionWorkspacePolicy | null>;
   onToggleSettings: (callback: () => void) => () => void;
   configGet: () => Promise<Record<string, unknown>>;
