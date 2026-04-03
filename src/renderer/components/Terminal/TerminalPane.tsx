@@ -2,6 +2,11 @@ import { useEffect, useRef } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
+import {
+  createBufferedTerminalTarget,
+  flushBufferedTerminalTarget,
+  routeTerminalOutput,
+} from "./terminalOutputBuffer";
 
 type TerminalPaneProps = {
   terminalId: string;
@@ -13,7 +18,7 @@ type CachedTerminal = {
   term: Terminal;
   fitAddon: FitAddon;
   opened: boolean;
-  unlisten: (() => void) | null;
+  write: (data: string) => void;
   resizeTimeout: ReturnType<typeof setTimeout> | null;
   observerFitTimeout: ReturnType<typeof setTimeout> | null;
   fitFrame: number | null;
@@ -24,6 +29,7 @@ type CachedTerminal = {
 // Cache terminal instances so they survive re-renders and tab switches
 const terminalCache = new Map<string, CachedTerminal>();
 const WINDOW_RESIZE_END_EVENT = "fortshell:window-resize-end";
+let terminalDataUnlisten: (() => void) | null = null;
 
 function isWindowResizing(): boolean {
   return document.body.classList.contains("is-window-resizing");
@@ -57,10 +63,24 @@ function scheduleFit(cached: CachedTerminal, options: { force?: boolean } = {}):
 }
 
 function flushPendingOutput(cached: CachedTerminal): void {
-  if (!cached.pendingOutput) return;
-  const output = cached.pendingOutput;
-  cached.pendingOutput = "";
-  cached.term.write(output);
+  flushBufferedTerminalTarget(cached);
+}
+
+function ensureTerminalDataListener(): void {
+  if (terminalDataUnlisten || typeof window === "undefined") {
+    return;
+  }
+
+  terminalDataUnlisten = window.electronAPI.onTerminalData((id, data) => {
+    const cached = terminalCache.get(id);
+
+    routeTerminalOutput({
+      terminalId: id,
+      data,
+      target: cached,
+      windowResizing: isWindowResizing(),
+    });
+  });
 }
 
 export function TerminalPane({ terminalId, isActive, fontSize: fontSizeProp }: TerminalPaneProps) {
@@ -74,6 +94,8 @@ export function TerminalPane({ terminalId, isActive, fontSize: fontSizeProp }: T
     let cached = terminalCache.get(terminalId);
 
     if (!cached) {
+      ensureTerminalDataListener();
+
       // Read CSS variables for theme consistency
       const styles = getComputedStyle(document.documentElement);
       const bg = styles.getPropertyValue("--terminal-bg").trim() || "#0a0e14";
@@ -129,15 +151,16 @@ export function TerminalPane({ terminalId, isActive, fontSize: fontSizeProp }: T
       term.loadAddon(fitAddon);
 
       cached = {
+        ...createBufferedTerminalTarget((data) => {
+          term.write(data);
+        }),
         term,
         fitAddon,
         opened: false,
-        unlisten: null,
         resizeTimeout: null,
         observerFitTimeout: null,
         fitFrame: null,
         deferredFit: false,
-        pendingOutput: "",
       };
       terminalCache.set(terminalId, cached);
 
@@ -155,24 +178,13 @@ export function TerminalPane({ terminalId, isActive, fontSize: fontSizeProp }: T
           window.electronAPI.terminalResize(terminalId, cols, rows);
         }, 150);
       });
-
-      // Wire output: main process → xterm
-      cached.unlisten = window.electronAPI.onTerminalData((id, data) => {
-        if (id === terminalId) {
-          if (isWindowResizing()) {
-            cachedRef.pendingOutput += data;
-            return;
-          }
-          flushPendingOutput(cachedRef);
-          term.write(data);
-        }
-      });
     }
 
     // Open terminal in DOM (only once)
     if (!cached.opened) {
       cached.term.open(container);
       cached.opened = true;
+      flushPendingOutput(cached);
       scheduleFit(cached, { force: true });
     } else {
       // Re-attach to DOM on tab switch
@@ -252,7 +264,6 @@ export function TerminalPane({ terminalId, isActive, fontSize: fontSizeProp }: T
 export function destroyTerminalCache(terminalId: string): void {
   const cached = terminalCache.get(terminalId);
   if (cached) {
-    if (cached.unlisten) cached.unlisten();
     if (cached.resizeTimeout) clearTimeout(cached.resizeTimeout);
     if (cached.observerFitTimeout) clearTimeout(cached.observerFitTimeout);
     if (cached.fitFrame !== null) cancelAnimationFrame(cached.fitFrame);

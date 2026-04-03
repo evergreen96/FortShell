@@ -9,6 +9,12 @@ import {
   getStaleSessions,
   type TerminalLayoutMode,
 } from "./lib/terminalLayout";
+import {
+  applyTerminalReplacement,
+  applyTerminalReplacements,
+  reconcileActiveTerminalId,
+  type TerminalTabState,
+} from "./lib/terminalSessionState";
 import type {
   ShellProfile,
   TerminalSessionMeta,
@@ -20,12 +26,7 @@ import "./styles/filetree.css";
 import "./styles/welcome.css";
 import "./styles/settings.css";
 
-type TerminalInfo = {
-  id: string;
-  name: string;
-  status: "active" | "exited";
-  slotKey: string;
-};
+type TerminalInfo = TerminalTabState;
 
 type TrustBadgeTone = "accent" | "warning" | "danger" | "muted";
 
@@ -316,56 +317,20 @@ export function App() {
 
   const applyReplacement = useCallback((replacement: TerminalSessionReplacement) => {
     destroyTerminalCache(replacement.oldTerminalId);
-    setTerminals((prev) =>
-      prev.map((terminal) =>
-        terminal.id === replacement.oldTerminalId
-          ? {
-              ...terminal,
-              id: replacement.newTerminalId,
-              status: "active",
-              slotKey: replacement.layoutSlotKey ?? terminal.slotKey,
-            }
-          : terminal
-      )
-    );
+    setTerminals((prev) => applyTerminalReplacement(prev, replacement));
     setActiveId((currentActiveId) =>
-      currentActiveId === replacement.oldTerminalId
-        ? replacement.newTerminalId
-        : currentActiveId
+      reconcileActiveTerminalId(currentActiveId, [replacement])
     );
   }, []);
 
   const applyReplacementBatch = useCallback((replacements: TerminalSessionReplacement[]) => {
-    const replacementMap = new Map(
-      replacements.map((replacement) => [replacement.oldTerminalId, replacement])
-    );
-
     for (const replacement of replacements) {
       destroyTerminalCache(replacement.oldTerminalId);
     }
 
-    setTerminals((prev) =>
-      prev.map((terminal) => {
-        const replacement = replacementMap.get(terminal.id);
-        if (!replacement) {
-          return terminal;
-        }
-
-        return {
-          ...terminal,
-          id: replacement.newTerminalId,
-          status: "active",
-          slotKey: replacement.layoutSlotKey ?? terminal.slotKey,
-        };
-      })
-    );
+    setTerminals((prev) => applyTerminalReplacements(prev, replacements));
     setActiveId((currentActiveId) => {
-      if (!currentActiveId) {
-        return currentActiveId;
-      }
-
-      const replacement = replacementMap.get(currentActiveId);
-      return replacement ? replacement.newTerminalId : currentActiveId;
+      return reconcileActiveTerminalId(currentActiveId, replacements);
     });
   }, []);
 
