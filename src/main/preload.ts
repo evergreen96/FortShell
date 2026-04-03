@@ -37,6 +37,10 @@ type TerminalCloseFailedResult = {
   reason?: string;
 };
 
+type PolicyChangedPayload = {
+  workspacePath: string | null;
+};
+
 contextBridge.exposeInMainWorld("electronAPI", {
   // Terminal
   terminalCreate: (opts: {
@@ -166,8 +170,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
   },
 
   // Policy change listener
-  onPolicyChanged: (callback: () => void) => {
-    const handler = () => callback();
+  onPolicyChanged: (callback: (payload: PolicyChangedPayload) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, payload: PolicyChangedPayload) =>
+      callback(payload);
     ipcRenderer.on("policy:changed", handler);
     return () => {
       ipcRenderer.removeListener("policy:changed", handler);

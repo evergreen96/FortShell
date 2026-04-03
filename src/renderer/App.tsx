@@ -17,6 +17,7 @@ import {
 } from "./lib/terminalSessionState";
 import type {
   CompiledProtectionEntry,
+  PolicyChangedPayload,
   ProtectionMutationResult,
   ProtectionPreset,
   ProtectionRule,
@@ -25,7 +26,11 @@ import type {
   TerminalSessionReplacement,
   TerminalTrustState,
 } from "./lib/types";
-import { shouldApplyProtectionRefreshResult } from "./lib/protection-refresh";
+import {
+  getProtectionRuleRemovalToastMessage,
+  shouldApplyProtectionRefreshResult,
+  shouldRefreshForPolicyChange,
+} from "./lib/protection-refresh";
 import "./lib/types";
 import "./styles/filetree.css";
 import "./styles/welcome.css";
@@ -310,8 +315,15 @@ export function App() {
 
   // Listen for policy changes and refresh protection state shown in the tree and console.
   useEffect(() => {
-    const unlisten = window.electronAPI.onPolicyChanged(() => {
-      refreshProtectionState();
+    const unlisten = window.electronAPI.onPolicyChanged((payload: PolicyChangedPayload) => {
+      if (
+        shouldRefreshForPolicyChange({
+          eventWorkspacePath: payload.workspacePath,
+          currentWorkspacePath: workspacePathRef.current,
+        })
+      ) {
+        refreshProtectionState();
+      }
     });
     return unlisten;
   }, [refreshProtectionState]);
@@ -485,13 +497,15 @@ export function App() {
   }
 
   async function handleRemoveProtectionRule(ruleId: string): Promise<boolean> {
-    let removed = false;
     try {
-      removed = await window.electronAPI.protectionRemoveRule(ruleId);
-      return removed;
-    } finally {
+      const removed = await window.electronAPI.protectionRemoveRule(ruleId);
       await refreshProtectionState();
-      showToast(removed ? "Rule removed" : "Rule not found");
+      showToast(getProtectionRuleRemovalToastMessage({ removed }));
+      return removed;
+    } catch (error) {
+      await refreshProtectionState();
+      showToast(getProtectionRuleRemovalToastMessage({ error }));
+      throw error;
     }
   }
 

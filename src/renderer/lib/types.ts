@@ -142,6 +142,10 @@ export type TerminalCloseFailedResult = {
   reason?: string;
 };
 
+export type PolicyChangedPayload = {
+  workspacePath: string | null;
+};
+
 export type ElectronAPI = {
   terminalCreate: (opts: {
     shell?: string;
@@ -194,7 +198,7 @@ export type ElectronAPI = {
   policySet: (filePath: string) => Promise<boolean>;
   policyRemove: (filePath: string) => Promise<boolean>;
   policyList: () => Promise<string[]>;
-  onPolicyChanged: (callback: () => void) => () => void;
+  onPolicyChanged: (callback: (payload: PolicyChangedPayload) => void) => () => void;
   protectionListPresets: () => Promise<ProtectionPreset[]>;
   protectionListRules: () => Promise<ProtectionRule[]>;
   protectionListCompiled: () => Promise<CompiledProtectionEntry[]>;

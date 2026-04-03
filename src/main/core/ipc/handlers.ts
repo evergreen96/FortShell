@@ -18,10 +18,10 @@ import {
 import { getRecentWorkspaces, addRecentWorkspace } from "../config/recent-workspaces";
 import { loadConfig, saveConfig, type AppConfig } from "../config/app-config";
 
-function notifyPolicyChanged(): void {
+function notifyPolicyChanged(workspacePath: string | null): void {
   for (const win of BrowserWindow.getAllWindows()) {
     if (!win.isDestroyed()) {
-      win.webContents.send("policy:changed");
+      win.webContents.send("policy:changed", { workspacePath });
     }
   }
 }
@@ -31,7 +31,7 @@ function notifyPolicyMutation(
   policyEngine: PolicyEngine,
   previousRevision: number
 ): void {
-  notifyPolicyChanged();
+  notifyPolicyChanged(policyEngine.getProjectRoot());
   if (policyEngine.getPolicyRevision() !== previousRevision) {
     ptyManager.markPolicyRevisionChanged(policyEngine.getPolicyRevision());
     notifySessionStateChanged(ptyManager, policyEngine);

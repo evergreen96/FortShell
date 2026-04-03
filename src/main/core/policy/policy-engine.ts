@@ -280,6 +280,10 @@ export class PolicyEngine {
     return this.policyRevision;
   }
 
+  getProjectRoot(): string | null {
+    return this.projectRoot;
+  }
+
   async addPathRule(filePath: string): Promise<{ changed: boolean; reason?: string }> {
     const normalized = this.projectRoot
       ? resolveWorkspaceTargetPath(this.projectRoot, filePath)

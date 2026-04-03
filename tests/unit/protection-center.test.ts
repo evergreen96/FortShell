@@ -4,7 +4,11 @@ import {
   getProtectionAction,
   getRemovalImpactMessage,
 } from "../../src/renderer/components/Protection/ProtectionCenter";
-import { shouldApplyProtectionRefreshResult } from "../../src/renderer/lib/protection-refresh";
+import {
+  getProtectionRuleRemovalToastMessage,
+  shouldApplyProtectionRefreshResult,
+  shouldRefreshForPolicyChange,
+} from "../../src/renderer/lib/protection-refresh";
 
 describe("getProtectionAction", () => {
   it("returns view-source for rule-generated entries", () => {
@@ -62,5 +66,26 @@ describe("shouldApplyProtectionRefreshResult", () => {
         latestRequestId: 3,
       })
     ).toBe(false);
+  });
+});
+
+describe("shouldRefreshForPolicyChange", () => {
+  it("ignores policy-change events for a different workspace during a switch", () => {
+    expect(
+      shouldRefreshForPolicyChange({
+        eventWorkspacePath: "/repo-b",
+        currentWorkspacePath: "/repo-a",
+      })
+    ).toBe(false);
+  });
+});
+
+describe("getProtectionRuleRemovalToastMessage", () => {
+  it("preserves backend errors instead of collapsing them into not-found", () => {
+    expect(
+      getProtectionRuleRemovalToastMessage({
+        error: new Error("remove failed"),
+      })
+    ).toBe("remove failed");
   });
 });
