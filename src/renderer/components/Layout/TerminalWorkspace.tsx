@@ -1,6 +1,7 @@
-import { Fragment, useState, useRef } from "react";
+import { Fragment, useState, useRef, type ReactNode } from "react";
 import { TerminalPane } from "../Terminal/TerminalPane";
 import type { TerminalLayoutMode } from "../../lib/terminalLayout";
+import type { TerminalTrustState } from "../../lib/types";
 
 const HANDLE_SIZE = 5;
 const MIN_PANEL_FRACTION = 0.12;
@@ -10,8 +11,11 @@ const MIN_PANEL_HEIGHT = 140;
 type TerminalInfo = {
   id: string;
   name: string;
-  status: string;
-  stalePolicy?: boolean;
+  status: "active" | "exited";
+  trustState?: TerminalTrustState;
+  trustLabel?: string;
+  trustTone?: "accent" | "warning" | "danger" | "muted";
+  trustTitle?: string;
 };
 
 type TerminalWorkspaceProps = {
@@ -19,6 +23,9 @@ type TerminalWorkspaceProps = {
   activeId: string | null;
   layoutMode: TerminalLayoutMode;
   onSelectTerminal: (id: string) => void;
+  onRestartTerminal: (id: string) => void;
+  onRetryProtected: (id: string) => void;
+  onCloseFailed: (id: string) => void;
   fontSize?: number;
 };
 
@@ -27,6 +34,9 @@ export function TerminalWorkspace({
   activeId,
   layoutMode,
   onSelectTerminal,
+  onRestartTerminal,
+  onRetryProtected,
+  onCloseFailed,
   fontSize,
 }: TerminalWorkspaceProps) {
   const [sizes, setSizes] = useState<number[]>([]);
@@ -48,6 +58,77 @@ export function TerminalWorkspace({
     );
   }
 
+  function renderTerminalHeader(terminal: TerminalInfo): ReactNode {
+    return (
+      <div className="terminal-cell-label">
+        <div className="terminal-cell-meta">
+          <span className="terminal-cell-title">{terminal.name}</span>
+          {terminal.trustLabel && (
+            <span
+              className={`terminal-cell-badge terminal-cell-badge-${terminal.trustTone ?? "muted"}`}
+              title={terminal.trustTitle}
+            >
+              {terminal.trustLabel}
+            </span>
+          )}
+          {terminal.status === "exited" && !terminal.trustLabel && (
+            <span className="terminal-cell-badge terminal-cell-badge-muted">exited</span>
+          )}
+        </div>
+        <div className="terminal-cell-actions">
+          {terminal.trustState === "stale-policy" && (
+            <button
+              className="terminal-cell-action terminal-cell-action-warning"
+              onClick={(event) => {
+                event.stopPropagation();
+                onRestartTerminal(terminal.id);
+              }}
+              type="button"
+            >
+              Restart
+            </button>
+          )}
+          {terminal.trustState === "fallback" && (
+            <button
+              className="terminal-cell-action terminal-cell-action-warning"
+              onClick={(event) => {
+                event.stopPropagation();
+                onRetryProtected(terminal.id);
+              }}
+              type="button"
+            >
+              Retry Protected
+            </button>
+          )}
+          {terminal.trustState === "launch-failed" && (
+            <>
+              <button
+                className="terminal-cell-action terminal-cell-action-warning"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onRetryProtected(terminal.id);
+                }}
+                type="button"
+              >
+                Retry
+              </button>
+              <button
+                className="terminal-cell-action terminal-cell-action-danger"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onCloseFailed(terminal.id);
+                }}
+                type="button"
+              >
+                Close
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   if (layoutMode === "horizontal" && terminals.length === 1) {
     const t = terminals[0];
     return (
@@ -56,17 +137,7 @@ export function TerminalWorkspace({
           className="terminal-workspace-cell terminal-workspace-cell-active"
           onClick={() => onSelectTerminal(t.id)}
         >
-          <div className="terminal-cell-label">
-            <div className="terminal-cell-meta">
-              <span className="terminal-cell-title">{t.name}</span>
-              {t.stalePolicy && (
-                <span className="terminal-cell-badge">restart required</span>
-              )}
-              {t.status === "exited" && (
-                <span className="terminal-cell-badge terminal-cell-badge-muted">exited</span>
-              )}
-            </div>
-          </div>
+          {renderTerminalHeader(t)}
           <TerminalPane terminalId={t.id} isActive={true} fontSize={fontSize} />
         </div>
       </div>
@@ -275,17 +346,7 @@ export function TerminalWorkspace({
             style={{ gridRow, gridColumn: gridCol }}
             onClick={() => onSelectTerminal(t.id)}
           >
-            <div className="terminal-cell-label">
-              <div className="terminal-cell-meta">
-                <span className="terminal-cell-title">{t.name}</span>
-                {t.stalePolicy && (
-                  <span className="terminal-cell-badge">restart required</span>
-                )}
-                {t.status === "exited" && (
-                  <span className="terminal-cell-badge terminal-cell-badge-muted">exited</span>
-                )}
-              </div>
-            </div>
+            {renderTerminalHeader(t)}
             <TerminalPane terminalId={t.id} isActive={t.id === activeId} fontSize={fontSize} />
           </div>
         );
@@ -344,17 +405,7 @@ export function TerminalWorkspace({
             style={{ flex: `${currentSizes[i]} 1 0%` }}
             onClick={() => onSelectTerminal(t.id)}
           >
-            <div className="terminal-cell-label">
-              <div className="terminal-cell-meta">
-                <span className="terminal-cell-title">{t.name}</span>
-                {t.stalePolicy && (
-                  <span className="terminal-cell-badge">restart required</span>
-                )}
-                {t.status === "exited" && (
-                  <span className="terminal-cell-badge terminal-cell-badge-muted">exited</span>
-                )}
-              </div>
-            </div>
+            {renderTerminalHeader(t)}
             <TerminalPane terminalId={t.id} isActive={t.id === activeId} fontSize={fontSize} />
           </div>
           {i < terminals.length - 1 && (

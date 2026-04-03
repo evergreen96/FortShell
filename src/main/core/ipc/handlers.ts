@@ -83,6 +83,22 @@ export function registerIpcHandlers(
     return ptyManager.destroy(id);
   });
 
+  safeHandle("terminal:restart", (_event, id: string) => {
+    return ptyManager.restart(id);
+  });
+
+  safeHandle("terminal:restart-all-stale", () => {
+    return ptyManager.restartAllStale();
+  });
+
+  safeHandle("terminal:retry-protected", (_event, id: string) => {
+    return ptyManager.retryProtected(id);
+  });
+
+  safeHandle("terminal:close-failed", (_event, id: string) => {
+    return ptyManager.closeFailed(id);
+  });
+
   safeHandle("terminal:profiles", () => {
     const config = loadConfig();
     return detectProfiles(config.customProfiles);

@@ -31,6 +31,30 @@ export type PtySession = {
   lastCreateOptions: TerminalCreateOptions;
 };
 
+export type TerminalSessionReplacement = {
+  oldTerminalId: string;
+  newTerminalId: string;
+  displayName: string;
+  layoutSlotKey?: string;
+};
+
+export type TerminalSessionActionResult = {
+  ok: boolean;
+  replacement?: TerminalSessionReplacement;
+  reason?: string;
+};
+
+export type TerminalBulkRestartResult = {
+  replacements: TerminalSessionReplacement[];
+  skippedTerminalIds: string[];
+};
+
+export type TerminalCloseFailedResult = {
+  closed: boolean;
+  terminalId: string;
+  reason?: string;
+};
+
 let nextId = 1;
 
 export class PtyManager {
@@ -49,6 +73,10 @@ export class PtyManager {
 
   getSessions(): TerminalSessionRuntime[] {
     return Array.from(this.sessions.values()).map((session) => session.runtime);
+  }
+
+  getSession(id: string): PtySession | undefined {
+    return this.sessions.get(id);
   }
 
   onSessionStateChanged(listener: () => void): () => void {
@@ -211,9 +239,97 @@ export class PtyManager {
     }));
   }
 
+  restart(id: string): TerminalSessionActionResult {
+    const session = this.sessions.get(id);
+    if (!session) {
+      return { ok: false, reason: "session-not-found" };
+    }
+
+    return this.replaceSession(session);
+  }
+
+  restartAllStale(): TerminalBulkRestartResult {
+    const staleSessionIds = Array.from(this.sessions.values())
+      .filter((session) => session.runtime.trustState === "stale-policy")
+      .map((session) => session.id);
+
+    const replacements: TerminalSessionReplacement[] = [];
+    const skippedTerminalIds: string[] = [];
+
+    for (const id of staleSessionIds) {
+      const result = this.restart(id);
+      if (result.ok && result.replacement) {
+        replacements.push(result.replacement);
+      } else {
+        skippedTerminalIds.push(id);
+      }
+    }
+
+    return { replacements, skippedTerminalIds };
+  }
+
+  retryProtected(id: string): TerminalSessionActionResult {
+    const session = this.sessions.get(id);
+    if (!session) {
+      return { ok: false, reason: "session-not-found" };
+    }
+
+    if (
+      session.runtime.trustState !== "fallback" &&
+      session.runtime.trustState !== "launch-failed"
+    ) {
+      return { ok: false, reason: "session-not-retryable" };
+    }
+
+    return this.replaceSession(session);
+  }
+
+  closeFailed(id: string): TerminalCloseFailedResult {
+    const session = this.sessions.get(id);
+    if (!session) {
+      return { closed: false, terminalId: id, reason: "session-not-found" };
+    }
+
+    if (session.runtime.trustState !== "launch-failed") {
+      return { closed: false, terminalId: id, reason: "session-not-closeable" };
+    }
+
+    return {
+      closed: this.destroy(id),
+      terminalId: id,
+    };
+  }
+
   private notifySessionStateChanged(): void {
     for (const listener of this.sessionStateListeners) {
       listener();
     }
+  }
+
+  private replaceSession(session: PtySession): TerminalSessionActionResult {
+    const oldTerminalId = session.id;
+    const nextLayoutSlotKey =
+      session.runtime.layoutSlotKey ??
+      session.lastCreateOptions.layoutSlotKey ??
+      oldTerminalId;
+
+    const nextCreateOptions: TerminalCreateOptions = {
+      ...session.lastCreateOptions,
+      displayName: session.name,
+      layoutSlotKey: nextLayoutSlotKey,
+    };
+
+    this.destroy(oldTerminalId);
+    const replacement = this.create(nextCreateOptions);
+
+    return {
+      ok: true,
+      replacement: {
+        oldTerminalId,
+        newTerminalId: replacement.id,
+        displayName: replacement.name,
+        layoutSlotKey: nextLayoutSlotKey,
+      },
+    };
   }
 }

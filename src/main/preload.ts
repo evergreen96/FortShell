@@ -6,6 +6,30 @@ type TerminalSessionStatePayload = {
   policyRevision: number;
 };
 
+type TerminalSessionReplacement = {
+  oldTerminalId: string;
+  newTerminalId: string;
+  displayName: string;
+  layoutSlotKey?: string;
+};
+
+type TerminalSessionActionResult = {
+  ok: boolean;
+  replacement?: TerminalSessionReplacement;
+  reason?: string;
+};
+
+type TerminalBulkRestartResult = {
+  replacements: TerminalSessionReplacement[];
+  skippedTerminalIds: string[];
+};
+
+type TerminalCloseFailedResult = {
+  closed: boolean;
+  terminalId: string;
+  reason?: string;
+};
+
 contextBridge.exposeInMainWorld("electronAPI", {
   // Terminal
   terminalCreate: (opts: {
@@ -13,6 +37,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
     cols?: number;
     rows?: number;
     cwd?: string;
+    displayName?: string;
+    layoutSlotKey?: string;
   }) => ipcRenderer.invoke("terminal:create", opts),
   terminalWrite: (id: string, data: string) =>
     ipcRenderer.send("terminal:write", id, data),
@@ -30,12 +56,13 @@ contextBridge.exposeInMainWorld("electronAPI", {
       ipcRenderer.removeListener("terminal:session-state", handler);
     };
   },
-  terminalRestart: (id: string) => ipcRenderer.invoke("terminal:restart", id),
+  terminalRestart: (id: string): Promise<TerminalSessionActionResult> =>
+    ipcRenderer.invoke("terminal:restart", id),
   terminalRestartAllStale: () =>
-    ipcRenderer.invoke("terminal:restart-all-stale"),
-  terminalRetryProtected: (id: string) =>
+    ipcRenderer.invoke("terminal:restart-all-stale") as Promise<TerminalBulkRestartResult>,
+  terminalRetryProtected: (id: string): Promise<TerminalSessionActionResult> =>
     ipcRenderer.invoke("terminal:retry-protected", id),
-  terminalCloseFailed: (id: string) =>
+  terminalCloseFailed: (id: string): Promise<TerminalCloseFailedResult> =>
     ipcRenderer.invoke("terminal:close-failed", id),
 
   // Terminal data listener

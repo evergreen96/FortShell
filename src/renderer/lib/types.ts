@@ -36,12 +36,38 @@ export type TerminalSessionMeta = {
   launchRetryable?: boolean;
 };
 
+export type TerminalSessionReplacement = {
+  oldTerminalId: string;
+  newTerminalId: string;
+  displayName: string;
+  layoutSlotKey?: string;
+};
+
+export type TerminalSessionActionResult = {
+  ok: boolean;
+  replacement?: TerminalSessionReplacement;
+  reason?: string;
+};
+
+export type TerminalBulkRestartResult = {
+  replacements: TerminalSessionReplacement[];
+  skippedTerminalIds: string[];
+};
+
+export type TerminalCloseFailedResult = {
+  closed: boolean;
+  terminalId: string;
+  reason?: string;
+};
+
 export type ElectronAPI = {
   terminalCreate: (opts: {
     shell?: string;
     cols?: number;
     rows?: number;
     cwd?: string;
+    displayName?: string;
+    layoutSlotKey?: string;
   }) => Promise<{ id: string; name: string }>;
   terminalWrite: (id: string, data: string) => void;
   terminalResize: (id: string, cols: number, rows: number) => void;
@@ -59,10 +85,10 @@ export type ElectronAPI = {
   onTerminalExit: (
     callback: (id: string, exitCode: number) => void
   ) => () => void;
-  terminalRestart: (id: string) => Promise<any>;
-  terminalRestartAllStale: () => Promise<any>;
-  terminalRetryProtected: (id: string) => Promise<any>;
-  terminalCloseFailed: (id: string) => Promise<any>;
+  terminalRestart: (id: string) => Promise<TerminalSessionActionResult>;
+  terminalRestartAllStale: () => Promise<TerminalBulkRestartResult>;
+  terminalRetryProtected: (id: string) => Promise<TerminalSessionActionResult>;
+  terminalCloseFailed: (id: string) => Promise<TerminalCloseFailedResult>;
   openFolder: () => Promise<string | null>;
   workspaceSetRoot: (dirPath: string) => Promise<string>;
   workspaceRecent: () => Promise<string[]>;

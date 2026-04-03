@@ -1,3 +1,5 @@
+import type { TerminalSessionMeta } from "./types";
+
 export type TerminalLayoutMode = "horizontal" | "vertical" | "grid";
 
 export type TerminalGridSpan = {
@@ -105,6 +107,12 @@ export function stackWeight(layout: TerminalWorkspaceLayout, terminalId: string)
 
 export function gridSpan(layout: TerminalWorkspaceLayout, terminalId: string): TerminalGridSpan {
   return layout.gridSpans[terminalId] ?? { cols: 1, rows: 1 };
+}
+
+export function getStaleSessions(
+  sessions: TerminalSessionMeta[],
+): TerminalSessionMeta[] {
+  return sessions.filter((session) => session.trustState === "stale-policy");
 }
 
 function clamp(value: number, min: number, max: number): number {
