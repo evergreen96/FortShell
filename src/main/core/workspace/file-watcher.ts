@@ -10,7 +10,7 @@ type WorkspaceChangePayload = {
 };
 
 export function shouldIgnoreWorkspaceChange(filename: string): boolean {
-  const parts = filename.split(path.sep);
+  const parts = filename.split(/[\\/]+/);
   return parts.some((part) => DEFAULT_IGNORE.has(part));
 }
 

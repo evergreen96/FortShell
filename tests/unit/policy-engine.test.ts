@@ -394,6 +394,23 @@ describe("PolicyEngine", () => {
     expect(await engine.removeRule(rules[0].id)).toBe(false);
   });
 
+  it("removes directly managed directory rules through the compatibility path", async () => {
+    await engine.setProjectRoot(tmpDir);
+
+    const secretsDir = path.join(tmpDir, "secrets");
+    const secretFile = path.join(secretsDir, "db.txt");
+    fs.mkdirSync(secretsDir);
+    fs.writeFileSync(secretFile, "secret");
+
+    expect(await engine.addDirectoryRule(secretsDir)).toEqual({ changed: true });
+    expect(engine.list()).toEqual([fs.realpathSync(secretsDir)]);
+    expect(await engine.unprotect(secretFile)).toBe(false);
+    expect(await engine.unprotect(secretsDir)).toBe(true);
+    expect(engine.list()).toEqual([]);
+    expect(engine.isProtected(secretsDir)).toBe(false);
+    expect(engine.isProtected(secretFile)).toBe(false);
+  });
+
   it("rejects manual path rules outside the current workspace", async () => {
     await engine.setProjectRoot(tmpDir);
 

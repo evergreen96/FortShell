@@ -254,6 +254,10 @@ function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+function isDirectManagedRule(rule: ProtectionRule): boolean {
+  return rule.source === "manual" || rule.source === "directory";
+}
+
 export class PolicyEngine {
   private rules: ProtectionRule[] = [];
   private compiledEntries: CompiledProtectionEntry[] = [];
@@ -500,16 +504,16 @@ export class PolicyEngine {
 
   async unprotect(filePath: string): Promise<boolean> {
     const normalized = resolveRealPath(filePath);
-    const manualRule = this.rules.find(
+    const directRule = this.rules.find(
       (rule) =>
-        rule.source === "manual" &&
+        isDirectManagedRule(rule) &&
         resolveRuleTargetPath(this.projectRoot, rule) === normalized
     );
-    if (!manualRule) {
+    if (!directRule) {
       return false;
     }
 
-    return this.removeRule(manualRule.id);
+    return this.removeRule(directRule.id);
   }
 
   isProtected(filePath: string): boolean {
@@ -529,7 +533,7 @@ export class PolicyEngine {
     return this.rules
       .filter(
         (rule) =>
-          rule.source === "manual" && (rule.kind === "path" || rule.kind === "directory")
+          isDirectManagedRule(rule) && (rule.kind === "path" || rule.kind === "directory")
       )
       .map((rule) => resolveRuleTargetPath(this.projectRoot, rule))
       .filter((entry): entry is string => Boolean(entry))
