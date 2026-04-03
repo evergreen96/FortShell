@@ -95,6 +95,55 @@ describe("PolicyEngine", () => {
     expect(engine.isProtected(filePath)).toBe(true);
   });
 
+  it("drops persisted direct rules that resolve outside the current workspace", async () => {
+    const insidePath = path.join(tmpDir, "inside.txt");
+    const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), "ai-ide-outside-load-"));
+    const outsidePath = path.join(outsideDir, "outside.txt");
+    fs.writeFileSync(insidePath, "inside");
+    fs.writeFileSync(outsidePath, "outside");
+
+    const policyPath = getWorkspacePolicyPath(tmpDir, policyStoreDir);
+    fs.mkdirSync(path.dirname(policyPath), { recursive: true });
+    fs.writeFileSync(
+      policyPath,
+      JSON.stringify({
+        version: 3,
+        workspaceRoot: fs.realpathSync(tmpDir),
+        rules: [
+          {
+            id: "inside-rule",
+            kind: "path",
+            source: "manual",
+            targetPath: "inside.txt",
+            createdAt: "2026-04-03T00:00:00.000Z",
+            updatedAt: "2026-04-03T00:00:00.000Z",
+          },
+          {
+            id: "outside-rule",
+            kind: "path",
+            source: "manual",
+            targetPath: outsidePath,
+            createdAt: "2026-04-03T00:00:00.000Z",
+            updatedAt: "2026-04-03T00:00:00.000Z",
+          },
+        ],
+        updatedAt: "2026-04-03T00:00:00.000Z",
+      }),
+      "utf-8"
+    );
+
+    await engine.setProjectRoot(tmpDir);
+
+    expect(engine.isProtected(insidePath)).toBe(true);
+    expect(engine.isProtected(outsidePath)).toBe(false);
+    expect(engine.listRules()).toHaveLength(1);
+    expect(engine.listRules()[0]).toMatchObject({
+      id: "inside-rule",
+      kind: "path",
+      targetPath: "inside.txt",
+    });
+  });
+
   it("persists manual protections as version 3 path rules", async () => {
     await engine.setProjectRoot(tmpDir);
 

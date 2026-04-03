@@ -13,9 +13,9 @@ import { PolicyEngine } from "../policy/policy-engine";
 import {
   BUILT_IN_PRESETS,
   type ProtectionPresetId,
-  type ProtectionWorkspacePolicy,
 } from "../policy/protection-rules";
 import { getRecentWorkspaces, addRecentWorkspace } from "../config/recent-workspaces";
+import { parseImportedWorkspacePolicy } from "../config/policy-store";
 import { loadConfig, saveConfig, type AppConfig } from "../config/app-config";
 
 function notifyPolicyChanged(workspacePath: string | null): void {
@@ -318,18 +318,11 @@ export function registerIpcHandlers(
 
   safeHandle("protection:import", async (_event, filePath: string) => {
     const raw = fs.readFileSync(filePath, "utf-8");
-    const parsedData = JSON.parse(raw);
-    if (
-      !parsedData ||
-      typeof parsedData !== "object" ||
-      (parsedData as Record<string, unknown>).version !== 3 ||
-      typeof (parsedData as Record<string, unknown>).workspaceRoot !== "string" ||
-      !Array.isArray((parsedData as Record<string, unknown>).rules)
-    ) {
+    const parsed = parseImportedWorkspacePolicy(raw, filePath);
+    if (!parsed) {
       throw new Error("Invalid protection policy file");
     }
 
-    const parsed = parsedData as ProtectionWorkspacePolicy;
     const previousRevision = policyEngine.getPolicyRevision();
     try {
       const result = await policyEngine.importWorkspacePolicy(parsed);
