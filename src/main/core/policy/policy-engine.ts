@@ -19,6 +19,7 @@ type PolicyEngineOptions = {
 type PolicySnapshot = {
   compiledEntries: CompiledProtectionEntry[];
   enforcerTargets: string[];
+  projectRoot: string | null;
   protectedDirectories: Set<string>;
   protectedPaths: Set<string>;
   rules: ProtectionRule[];
@@ -104,6 +105,10 @@ function buildWorkspaceEntries(projectRoot: string) {
   ];
 }
 
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
 export class PolicyEngine {
   private rules: ProtectionRule[] = [];
   private compiledEntries: CompiledProtectionEntry[] = [];
@@ -132,8 +137,6 @@ export class PolicyEngine {
       return { changed: false, reason: "already-protected" };
     }
 
-    const previousContext = this.getEffectivePolicyContext();
-    const previousEnforcerTargets = this.getEnforcerTargetsForRules(this.rules, this.compiledEntries);
     const nextRule: ProtectionRule = {
       id: crypto.randomUUID(),
       kind: isDirectoryPath(normalized) ? "directory" : "path",
@@ -142,16 +145,18 @@ export class PolicyEngine {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
-    const nextRules = [
+    const nextSnapshot = this.buildPolicySnapshot(this.projectRoot, [
       ...this.rules,
       nextRule,
-    ];
-    const nextState = this.buildPolicySnapshot(nextRules);
+    ]);
+    const previousContext = this.getEffectivePolicyContext();
 
-    await this.applyAddedEnforcerTargets(previousEnforcerTargets, nextState.enforcerTargets);
+    await this.applyAddedEnforcerTargets(
+      this.getCurrentSnapshot().enforcerTargets,
+      nextSnapshot.enforcerTargets
+    );
 
-    this.commitPolicySnapshot(nextState);
-
+    this.commitPolicySnapshot(nextSnapshot);
     if (previousContext !== this.getEffectivePolicyContext()) {
       this.bumpPolicyRevision();
     }
@@ -166,14 +171,15 @@ export class PolicyEngine {
       return false;
     }
 
+    const nextSnapshot = this.buildPolicySnapshot(this.projectRoot, nextRules);
     const previousContext = this.getEffectivePolicyContext();
-    const previousEnforcerTargets = this.getEnforcerTargetsForRules(this.rules, this.compiledEntries);
-    const nextState = this.buildPolicySnapshot(nextRules);
 
-    await this.removeDroppedEnforcerTargets(previousEnforcerTargets, nextState.enforcerTargets);
+    await this.removeDroppedEnforcerTargets(
+      this.getCurrentSnapshot().enforcerTargets,
+      nextSnapshot.enforcerTargets
+    );
 
-    this.commitPolicySnapshot(nextState);
-
+    this.commitPolicySnapshot(nextSnapshot);
     if (previousContext !== this.getEffectivePolicyContext()) {
       this.bumpPolicyRevision();
     }
@@ -191,25 +197,33 @@ export class PolicyEngine {
   }
 
   async setProjectRoot(root: string): Promise<void> {
-    const previousContext = this.getEffectivePolicyContext();
+    const previousSnapshot = this.getCurrentSnapshot();
+    const previousContext = this.getEffectivePolicyContextForSnapshot(previousSnapshot);
+    const nextRoot = resolveRealPath(root);
+    const nextSnapshot = this.buildPolicySnapshot(
+      nextRoot,
+      loadWorkspacePolicy(nextRoot, this.policyStoreDir)
+    );
 
     if (this.enforcer?.isAvailable()) {
       try {
         await this.enforcer.cleanup();
       } catch (err) {
-        console.warn(`[policy] Failed to reset previous policy state:`, err);
+        await this.restorePreviousSnapshot(previousSnapshot, err, false);
+      }
+
+      try {
+        await this.replayEnforcerTargets(nextSnapshot.enforcerTargets);
+      } catch (err) {
+        await this.restorePreviousSnapshot(previousSnapshot, err, true);
       }
     }
 
-    this.projectRoot = resolveRealPath(root);
-    this.load();
-
-    const nextContext = this.getEffectivePolicyContext();
+    this.commitPolicySnapshot(nextSnapshot);
+    const nextContext = this.getEffectivePolicyContextForSnapshot(nextSnapshot);
     if (previousContext !== null && previousContext !== nextContext) {
       this.bumpPolicyRevision();
     }
-
-    await this.applyAllEnforcerTargets();
   }
 
   async protect(filePath: string): Promise<boolean> {
@@ -245,7 +259,14 @@ export class PolicyEngine {
   }
 
   list(): string[] {
-    return Array.from(this.protectedPaths).sort();
+    return this.rules
+      .filter(
+        (rule) =>
+          rule.source === "manual" && (rule.kind === "path" || rule.kind === "directory")
+      )
+      .map((rule) => resolveRuleTargetPath(this.projectRoot, rule))
+      .filter((entry): entry is string => Boolean(entry))
+      .sort();
   }
 
   async cleanup(): Promise<void> {
@@ -264,29 +285,17 @@ export class PolicyEngine {
     }
   }
 
-  private load(): void {
-    this.rules = [];
-    this.compiledEntries = [];
-    this.protectedPaths = new Set();
-    this.protectedDirectories = new Set();
-    if (!this.projectRoot) return;
-
-    try {
-      this.rules = loadWorkspacePolicy(this.projectRoot, this.policyStoreDir);
-      this.commitPolicySnapshot(this.buildPolicySnapshot(this.rules));
-    } catch (err) {
-      console.warn(`[policy] Failed to load policy:`, err);
-    }
-  }
-
-  private buildPolicySnapshot(rules: ProtectionRule[]): PolicySnapshot {
+  private buildPolicySnapshot(
+    projectRoot: string | null,
+    rules: readonly ProtectionRule[]
+  ): PolicySnapshot {
     const compiledEntries: CompiledProtectionEntry[] = [];
     const protectedPaths = new Set<string>();
     const protectedDirectories = new Set<string>();
     const normalizedRules = rules.map((rule) => cloneRule(rule));
 
     for (const rule of normalizedRules) {
-      const directTarget = resolveRuleTargetPath(this.projectRoot, rule);
+      const directTarget = resolveRuleTargetPath(projectRoot, rule);
       if (!directTarget) continue;
 
       protectedPaths.add(directTarget);
@@ -295,32 +304,19 @@ export class PolicyEngine {
       }
     }
 
-    if (!this.projectRoot) {
-      return {
-        compiledEntries,
-        enforcerTargets: this.getEnforcerTargetsForRules(normalizedRules, compiledEntries),
-        protectedDirectories,
-        protectedPaths,
-        rules: normalizedRules,
-      };
-    }
-
-    try {
-      compiledEntries.push(...compileProtectionRules({
-        workspaceRoot: this.projectRoot,
-        rules: normalizedRules,
-        presetCatalog: BUILT_IN_PRESETS,
-        workspaceEntries: buildWorkspaceEntries(this.projectRoot),
-      }));
-    } catch (err) {
-      console.warn(`[policy] Failed to compile protection rules:`, err);
-      return {
-        compiledEntries: [],
-        enforcerTargets: this.getEnforcerTargetsForRules(normalizedRules, []),
-        protectedDirectories,
-        protectedPaths,
-        rules: normalizedRules,
-      };
+    if (projectRoot) {
+      try {
+        compiledEntries.push(
+          ...compileProtectionRules({
+            workspaceRoot: projectRoot,
+            rules: normalizedRules,
+            presetCatalog: BUILT_IN_PRESETS,
+            workspaceEntries: buildWorkspaceEntries(projectRoot),
+          })
+        );
+      } catch (err) {
+        console.warn(`[policy] Failed to compile protection rules:`, err);
+      }
     }
 
     for (const entry of compiledEntries) {
@@ -333,21 +329,43 @@ export class PolicyEngine {
 
     return {
       compiledEntries,
-      enforcerTargets: this.getEnforcerTargetsForRules(normalizedRules, compiledEntries),
+      enforcerTargets: this.getEnforcerTargetsForRules(
+        projectRoot,
+        normalizedRules,
+        compiledEntries
+      ),
+      projectRoot,
       protectedDirectories,
       protectedPaths,
       rules: normalizedRules,
     };
   }
 
+  private getCurrentSnapshot(): PolicySnapshot {
+    return {
+      compiledEntries: this.compiledEntries.map((entry) => ({ ...entry })),
+      enforcerTargets: this.getEnforcerTargetsForRules(
+        this.projectRoot,
+        this.rules,
+        this.compiledEntries
+      ),
+      projectRoot: this.projectRoot,
+      protectedDirectories: new Set(this.protectedDirectories),
+      protectedPaths: new Set(this.protectedPaths),
+      rules: this.rules.map((rule) => cloneRule(rule)),
+    };
+  }
+
   private commitPolicySnapshot(snapshot: PolicySnapshot): void {
-    this.rules = snapshot.rules;
-    this.compiledEntries = snapshot.compiledEntries;
-    this.protectedPaths = snapshot.protectedPaths;
-    this.protectedDirectories = snapshot.protectedDirectories;
+    this.projectRoot = snapshot.projectRoot;
+    this.rules = snapshot.rules.map((rule) => cloneRule(rule));
+    this.compiledEntries = snapshot.compiledEntries.map((entry) => ({ ...entry }));
+    this.protectedPaths = new Set(snapshot.protectedPaths);
+    this.protectedDirectories = new Set(snapshot.protectedDirectories);
   }
 
   private getEnforcerTargetsForRules(
+    projectRoot: string | null,
     rules: readonly ProtectionRule[],
     compiledEntries: readonly CompiledProtectionEntry[]
   ): string[] {
@@ -355,7 +373,7 @@ export class PolicyEngine {
     const ruleById = new Map(rules.map((rule) => [rule.id, rule]));
 
     for (const rule of rules) {
-      const directTarget = resolveRuleTargetPath(this.projectRoot, rule);
+      const directTarget = resolveRuleTargetPath(projectRoot, rule);
       if (directTarget) {
         targets.add(directTarget);
       }
@@ -374,23 +392,63 @@ export class PolicyEngine {
     return Array.from(targets).sort();
   }
 
-  private async applyAllEnforcerTargets(): Promise<void> {
+  private async replayEnforcerTargets(targets: readonly string[]): Promise<void> {
     if (!this.enforcer?.isAvailable()) {
       return;
     }
 
-    for (const protectedPath of this.getEnforcerTargetsForRules(this.rules, this.compiledEntries)) {
-      try {
-        await this.enforcer.applyProtection(protectedPath);
-      } catch (err) {
-        console.warn(`[policy] Failed to re-apply protection for ${protectedPath}:`, err);
-      }
+    for (const targetPath of targets) {
+      await this.enforcer.applyProtection(targetPath);
     }
   }
 
+  private async restorePreviousSnapshot(
+    previousSnapshot: PolicySnapshot,
+    cause: unknown,
+    cleanupBeforeRestore: boolean
+  ): Promise<never> {
+    let cleanupError: unknown = null;
+    let restoreError: unknown = null;
+
+    if (this.enforcer?.isAvailable() && cleanupBeforeRestore) {
+      try {
+        await this.enforcer.cleanup();
+      } catch (err) {
+        cleanupError = err;
+      }
+    }
+
+    if (!cleanupError) {
+      try {
+        await this.replayEnforcerTargets(previousSnapshot.enforcerTargets);
+      } catch (err) {
+        restoreError = err;
+      }
+    }
+
+    if (!cleanupError && !restoreError) {
+      this.commitPolicySnapshot(previousSnapshot);
+      throw (cause instanceof Error ? cause : new Error(errorMessage(cause)));
+    }
+
+    this.commitPolicySnapshot(
+      this.buildPolicySnapshot(previousSnapshot.projectRoot, [])
+    );
+
+    const details = [`replay failed: ${errorMessage(cause)}`];
+    if (cleanupError) {
+      details.push(`cleanup failed: ${errorMessage(cleanupError)}`);
+    }
+    if (restoreError) {
+      details.push(`restore failed: ${errorMessage(restoreError)}`);
+    }
+
+    throw new Error(details.join("; "));
+  }
+
   private async applyAddedEnforcerTargets(
-    previousTargets: string[],
-    nextTargets: string[]
+    previousTargets: readonly string[],
+    nextTargets: readonly string[]
   ): Promise<void> {
     if (!this.enforcer?.isAvailable()) {
       return;
@@ -407,8 +465,8 @@ export class PolicyEngine {
   }
 
   private async removeDroppedEnforcerTargets(
-    previousTargets: string[],
-    nextTargets: string[]
+    previousTargets: readonly string[],
+    nextTargets: readonly string[]
   ): Promise<void> {
     if (!this.enforcer?.isAvailable()) {
       return;
@@ -429,13 +487,17 @@ export class PolicyEngine {
   }
 
   private getEffectivePolicyContext(): string | null {
-    if (!this.projectRoot) {
+    return this.getEffectivePolicyContextForSnapshot(this.getCurrentSnapshot());
+  }
+
+  private getEffectivePolicyContextForSnapshot(snapshot: PolicySnapshot): string | null {
+    if (!snapshot.projectRoot) {
       return null;
     }
 
-    const protectedEntries = Array.from(this.protectedPaths).sort();
+    const protectedEntries = Array.from(snapshot.protectedPaths).sort();
     return JSON.stringify({
-      projectRoot: this.projectRoot,
+      projectRoot: snapshot.projectRoot,
       protectedEntries,
     });
   }

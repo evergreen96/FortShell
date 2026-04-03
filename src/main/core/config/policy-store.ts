@@ -1,7 +1,12 @@
 import crypto from "crypto";
 import fs from "fs";
 import path from "path";
-import type { ProtectionPresetId, ProtectionRule, ProtectionRuleSource } from "../policy/protection-rules";
+import {
+  BUILT_IN_PRESETS,
+  type ProtectionPresetId,
+  type ProtectionRule,
+  type ProtectionRuleSource,
+} from "../policy/protection-rules";
 import { resolveRealPath } from "../utils";
 
 type StoredPolicyFileV2 = {
@@ -19,6 +24,16 @@ type StoredPolicyFileV3 = {
 };
 
 type StoredPolicyFile = StoredPolicyFileV2 | StoredPolicyFileV3;
+
+const VALID_RULE_KINDS = new Set(["path", "directory", "extension", "preset"]);
+const VALID_RULE_SOURCES = new Set([
+  "manual",
+  "directory",
+  "extension",
+  "preset",
+  "import",
+]);
+const VALID_PRESET_IDS = new Set<string>(BUILT_IN_PRESETS.map((preset) => preset.id));
 
 function getDefaultPolicyStoreDir(): string {
   const { app } = require("electron") as typeof import("electron");
@@ -93,7 +108,11 @@ function parseStoredRule(rule: unknown): ProtectionRule | null {
   const updatedAt =
     typeof candidate.updatedAt === "string" ? candidate.updatedAt : undefined;
 
-  if (!id || !source) {
+  if (
+    !id ||
+    !VALID_RULE_KINDS.has(kind) ||
+    !VALID_RULE_SOURCES.has(source)
+  ) {
     return null;
   }
 
@@ -109,19 +128,28 @@ function parseStoredRule(rule: unknown): ProtectionRule | null {
   }
 
   if (kind === "extension" && Array.isArray(candidate.extensions)) {
+    const extensions = candidate.extensions.filter(
+      (entry: unknown): entry is string => typeof entry === "string" && entry.trim().length > 0
+    );
+    if (extensions.length !== candidate.extensions.length || extensions.length === 0) {
+      return null;
+    }
+
     return {
       id,
       kind,
       source: source as ProtectionRuleSource,
-      extensions: candidate.extensions.filter(
-        (entry: unknown): entry is string => typeof entry === "string"
-      ),
+      extensions,
       createdAt,
       updatedAt,
     };
   }
 
-  if (kind === "preset" && typeof candidate.presetId === "string") {
+  if (
+    kind === "preset" &&
+    typeof candidate.presetId === "string" &&
+    VALID_PRESET_IDS.has(candidate.presetId)
+  ) {
     return {
       id,
       kind,

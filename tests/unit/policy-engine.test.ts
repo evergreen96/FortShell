@@ -180,6 +180,84 @@ describe("PolicyEngine", () => {
     expect(appliedPaths).toContain(fs.realpathSync(filePath));
   });
 
+  it("does not commit a workspace switch when replaying the next snapshot fails", async () => {
+    const previousFilePath = path.join(tmpDir, "previous.txt");
+    fs.writeFileSync(previousFilePath, "previous");
+
+    const nextDir = fs.mkdtempSync(path.join(os.tmpdir(), "ai-ide-test-next-"));
+    const nextEnvPath = path.join(nextDir, ".env");
+    const nextSecretPath = path.join(nextDir, "secret.txt");
+    fs.writeFileSync(nextEnvPath, "env");
+    fs.writeFileSync(nextSecretPath, "secret");
+
+    const appliedPaths = new Set<string>();
+    let nextReplayAttempts = 0;
+    const fakeEnforcer: PolicyEnforcer = {
+      applyProtection: async (targetPath) => {
+        if (targetPath.startsWith(fs.realpathSync(nextDir))) {
+          nextReplayAttempts += 1;
+          if (nextReplayAttempts === 2) {
+            throw new Error("replay failed");
+          }
+        }
+        appliedPaths.add(targetPath);
+      },
+      removeProtection: async (targetPath) => {
+        appliedPaths.delete(targetPath);
+      },
+      isAvailable: () => true,
+      cleanup: async () => {
+        appliedPaths.clear();
+      },
+    };
+    engine.setEnforcer(fakeEnforcer);
+
+    try {
+      await engine.setProjectRoot(tmpDir);
+      await engine.protect(previousFilePath);
+
+      const nextPolicyPath = getWorkspacePolicyPath(nextDir, policyStoreDir);
+      fs.mkdirSync(path.dirname(nextPolicyPath), { recursive: true });
+      fs.writeFileSync(
+        nextPolicyPath,
+        JSON.stringify({
+          version: 3,
+          workspaceRoot: fs.realpathSync(nextDir),
+          rules: [
+            {
+              id: "rule-preset-env",
+              kind: "preset",
+              source: "preset",
+              presetId: "env-files",
+              createdAt: "2026-04-03T00:00:00.000Z",
+              updatedAt: "2026-04-03T00:00:00.000Z",
+            },
+            {
+              id: "rule-secret",
+              kind: "path",
+              source: "manual",
+              targetPath: "secret.txt",
+              createdAt: "2026-04-03T00:00:00.000Z",
+              updatedAt: "2026-04-03T00:00:00.000Z",
+            },
+          ],
+          updatedAt: "2026-04-03T00:00:00.000Z",
+        }),
+        "utf-8"
+      );
+
+      await expect(engine.setProjectRoot(nextDir)).rejects.toThrow("replay failed");
+      expect(engine.isProtected(previousFilePath)).toBe(true);
+      expect(engine.isProtected(nextEnvPath)).toBe(false);
+      expect(engine.isProtected(nextSecretPath)).toBe(false);
+      expect(engine.list()).toEqual([fs.realpathSync(previousFilePath)]);
+      expect(appliedPaths).toEqual(new Set([fs.realpathSync(previousFilePath)]));
+      expect(engine.getPolicyRevision()).toBe(1);
+    } finally {
+      fs.rmSync(nextDir, { recursive: true, force: true });
+    }
+  });
+
   it("adds and removes manual path rules through the rule APIs", async () => {
     await engine.setProjectRoot(tmpDir);
 
@@ -258,9 +336,11 @@ describe("PolicyEngine", () => {
     expect(engine.getPolicyRevision()).toBe(1);
   });
 
-  it("lists effective compiled protections for rule-based policies", async () => {
+  it("keeps list focused on directly managed paths while compiled protections remain visible", async () => {
     const envPath = path.join(tmpDir, ".env");
+    const manualPath = path.join(tmpDir, "manual.txt");
     fs.writeFileSync(envPath, "secret");
+    fs.writeFileSync(manualPath, "manual");
 
     const policyPath = getWorkspacePolicyPath(tmpDir, policyStoreDir);
     fs.mkdirSync(path.dirname(policyPath), { recursive: true });
@@ -278,6 +358,14 @@ describe("PolicyEngine", () => {
             createdAt: "2026-04-03T00:00:00.000Z",
             updatedAt: "2026-04-03T00:00:00.000Z",
           },
+          {
+            id: "rule-manual",
+            kind: "path",
+            source: "manual",
+            targetPath: "manual.txt",
+            createdAt: "2026-04-03T00:00:00.000Z",
+            updatedAt: "2026-04-03T00:00:00.000Z",
+          },
         ],
         updatedAt: "2026-04-03T00:00:00.000Z",
       }),
@@ -286,7 +374,77 @@ describe("PolicyEngine", () => {
 
     await engine.setProjectRoot(tmpDir);
 
-    expect(engine.list()).toContain(fs.realpathSync(envPath));
+    expect(engine.list()).toEqual([fs.realpathSync(manualPath)]);
+    expect(engine.isProtected(envPath)).toBe(true);
+    expect(engine.isProtected(manualPath)).toBe(true);
+    expect(
+      engine.listCompiledEntries().map((entry) => entry.path)
+    ).toContain(fs.realpathSync(envPath));
+  });
+
+  it("ignores invalid version 3 rules at load time", async () => {
+    const validPath = path.join(tmpDir, "valid.txt");
+    const pemPath = path.join(tmpDir, "cert.pem");
+    fs.writeFileSync(validPath, "valid");
+    fs.writeFileSync(pemPath, "pem");
+
+    const policyPath = getWorkspacePolicyPath(tmpDir, policyStoreDir);
+    fs.mkdirSync(path.dirname(policyPath), { recursive: true });
+    fs.writeFileSync(
+      policyPath,
+      JSON.stringify({
+        version: 3,
+        workspaceRoot: fs.realpathSync(tmpDir),
+        rules: [
+          {
+            id: "rule-valid",
+            kind: "path",
+            source: "manual",
+            targetPath: "valid.txt",
+            createdAt: "2026-04-03T00:00:00.000Z",
+            updatedAt: "2026-04-03T00:00:00.000Z",
+          },
+          {
+            id: "rule-invalid-kind",
+            kind: "invalid-kind",
+            source: "manual",
+            targetPath: "ignored.txt",
+          },
+          {
+            id: "rule-invalid-source",
+            kind: "path",
+            source: "invalid-source",
+            targetPath: "ignored-source.txt",
+          },
+          {
+            id: "rule-invalid-preset",
+            kind: "preset",
+            source: "preset",
+            presetId: "invalid-preset-id",
+          },
+          {
+            id: "rule-invalid-extension",
+            kind: "extension",
+            source: "extension",
+            extensions: [".pem", 42],
+          },
+        ],
+        updatedAt: "2026-04-03T00:00:00.000Z",
+      }),
+      "utf-8"
+    );
+
+    await engine.setProjectRoot(tmpDir);
+
+    expect(engine.listRules()).toHaveLength(1);
+    expect(engine.listRules()[0]).toMatchObject({
+      id: "rule-valid",
+      kind: "path",
+      source: "manual",
+      targetPath: "valid.txt",
+    });
+    expect(engine.isProtected(validPath)).toBe(true);
+    expect(engine.isProtected(pemPath)).toBe(false);
   });
 
   it("should not duplicate protections", async () => {
