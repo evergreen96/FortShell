@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { destroyTerminalCache } from "./components/Terminal/TerminalPane";
 import { TerminalWorkspace } from "./components/Layout/TerminalWorkspace";
 import { FileTree } from "./components/FileTree/FileTree";
@@ -31,6 +31,7 @@ import {
   shouldApplyProtectionRefreshResult,
   shouldRefreshForPolicyChange,
 } from "./lib/protection-refresh";
+import { buildExplorerProtectedPathSet } from "./lib/protection-paths";
 import "./lib/types";
 import "./styles/filetree.css";
 import "./styles/welcome.css";
@@ -145,7 +146,6 @@ export function App() {
   const [editingTabId, setEditingTabId] = useState<string | null>(null);
   const [layoutMode, setLayoutMode] = useState<TerminalLayoutMode>("horizontal");
   const [workspacePath, setWorkspacePath] = useState<string | null>(null);
-  const [protectedPaths, setProtectedPaths] = useState<Set<string>>(new Set());
   const [protectionPresets, setProtectionPresets] = useState<ProtectionPreset[]>([]);
   const [protectionRules, setProtectionRules] = useState<ProtectionRule[]>([]);
   const [compiledProtections, setCompiledProtections] = useState<CompiledProtectionEntry[]>([]);
@@ -252,15 +252,13 @@ export function App() {
         })
       ) {
         setProtectionPresets([]);
-        setProtectedPaths(new Set());
         setProtectionRules([]);
         setCompiledProtections([]);
       }
       return;
     }
 
-    const [paths, presets, rules, compiled] = await Promise.all([
-      window.electronAPI.policyList(),
+    const [presets, rules, compiled] = await Promise.all([
       window.electronAPI.protectionListPresets(),
       window.electronAPI.protectionListRules(),
       window.electronAPI.protectionListCompiled(),
@@ -278,7 +276,6 @@ export function App() {
     }
 
     setProtectionPresets(presets);
-    setProtectedPaths(new Set(paths));
     setProtectionRules(rules);
     setCompiledProtections(compiled);
   }, [workspacePath]);
@@ -509,6 +506,11 @@ export function App() {
     }
   }
 
+  const handleViewProtection = useCallback((ruleId: string) => {
+    setSidebarTab("protection");
+    setFocusedSourceRuleId(ruleId);
+  }, []);
+
   function handleFocusSource(ruleId: string) {
     setFocusedSourceRuleId(null);
     window.setTimeout(() => {
@@ -630,6 +632,10 @@ export function App() {
       trustTitle: badge?.title,
     };
   });
+  const explorerProtectedPaths = useMemo(
+    () => buildExplorerProtectedPathSet(compiledProtections),
+    [compiledProtections]
+  );
 
   // Welcome screen when no workspace is open
   if (!workspacePath) {
@@ -805,9 +811,11 @@ export function App() {
             >
               <FileTree
                 rootPath={workspacePath}
-                protectedPaths={protectedPaths}
+                protectedPaths={explorerProtectedPaths}
+                compiledEntries={compiledProtections}
                 onProtect={handleProtect}
                 onUnprotect={handleUnprotect}
+                onViewProtection={handleViewProtection}
                 onOpenFolder={openFolder}
               />
             </aside>
