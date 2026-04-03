@@ -112,6 +112,10 @@ function compileRuleEntries(
   workspaceEntries: readonly WorkspaceProtectionEntry[]
 ): CompiledProtectionEntry[] {
   const sourceLabel = getProtectionRuleSourceLabel(rule, presetCatalog);
+  const directTarget =
+    rule.kind === "path" || rule.kind === "directory"
+      ? normalizeRulePath(workspaceRoot, rule.targetPath)
+      : null;
   const matched: CompiledProtectionEntry[] = [];
 
   for (const entry of workspaceEntries) {
@@ -139,7 +143,8 @@ function compileRuleEntries(
           ...entry,
           type: entry.isDirectory ? "folder" : "file",
           status: "shielded",
-          canRemoveDirectly: rule.source === "manual",
+          canRemoveDirectly:
+            rule.source === "manual" && directTarget !== null && entry.relativePath === directTarget,
           sourceRuleId: rule.id,
           sourceKind: rule.kind,
           sourceLabel,

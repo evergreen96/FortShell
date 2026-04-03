@@ -98,6 +98,31 @@ describe("compileProtectionRules", () => {
     ]);
   });
 
+  it("marks only the directly added manual directory row as directly removable", () => {
+    const entries = compileProtectionRules({
+      workspaceRoot: "/repo",
+      rules: [
+        { id: "dir-1", kind: "directory", source: "manual", targetPath: "/repo/secrets" },
+      ],
+      presetCatalog: BUILT_IN_PRESETS,
+      workspaceEntries: [
+        { path: "/repo/secrets", relativePath: "secrets", name: "secrets", ext: "", isDirectory: true },
+        { path: "/repo/secrets/db.txt", relativePath: "secrets/db.txt", name: "db.txt", ext: ".txt", isDirectory: false },
+      ],
+    });
+
+    expect(
+      entries.find((entry) => entry.relativePath === "secrets")
+    ).toMatchObject({
+      canRemoveDirectly: true,
+    });
+    expect(
+      entries.find((entry) => entry.relativePath === "secrets/db.txt")
+    ).toMatchObject({
+      canRemoveDirectly: false,
+    });
+  });
+
   it("throws when a preset rule references an unknown preset id", () => {
     expect(() =>
       compileProtectionRules({
