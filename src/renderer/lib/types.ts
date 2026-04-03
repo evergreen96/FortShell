@@ -195,6 +195,7 @@ export type ElectronAPI = {
   policyRemove: (filePath: string) => Promise<boolean>;
   policyList: () => Promise<string[]>;
   onPolicyChanged: (callback: () => void) => () => void;
+  protectionListPresets: () => Promise<ProtectionPreset[]>;
   protectionListRules: () => Promise<ProtectionRule[]>;
   protectionListCompiled: () => Promise<CompiledProtectionEntry[]>;
   protectionApplyPreset: (presetId: ProtectionPresetId) => Promise<ProtectionMutationResult>;

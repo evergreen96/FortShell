@@ -68,6 +68,7 @@ test.describe("Terminal Integration", () => {
     const methods = await page.evaluate(() => {
       const api = (window as any).electronAPI;
       return {
+        hasProtectionListPresets: typeof api.protectionListPresets === "function",
         hasProtectionListRules: typeof api.protectionListRules === "function",
         hasProtectionListCompiled: typeof api.protectionListCompiled === "function",
         hasProtectionApplyPreset: typeof api.protectionApplyPreset === "function",
@@ -95,6 +96,7 @@ test.describe("Terminal Integration", () => {
       };
     });
 
+    expect(methods.hasProtectionListPresets).toBe(true);
     expect(methods.hasProtectionListRules).toBe(true);
     expect(methods.hasProtectionListCompiled).toBe(true);
     expect(methods.hasProtectionApplyPreset).toBe(true);

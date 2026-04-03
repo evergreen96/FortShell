@@ -1399,12 +1399,39 @@ button {
   opacity: 0.7;
 }
 
+.protection-remove-confirm {
+  align-items: flex-start;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 280px;
+}
+
+.protection-remove-confirm-copy {
+  color: var(--warning);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.protection-remove-confirm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .protection-feedback {
   color: var(--text-secondary);
   font-size: 13px;
   line-height: 1.55;
   min-height: 22px;
   padding-top: 14px;
+}
+
+.protection-inline-note {
+  color: var(--warning);
+  font-size: 12px;
+  line-height: 1.6;
+  margin-top: 12px;
 }
 
 .protection-rule-shell,

@@ -10,9 +10,10 @@ import {
 } from "../workspace/file-indexer";
 import { FileWatcher } from "../workspace/file-watcher";
 import { PolicyEngine } from "../policy/policy-engine";
-import type {
-  ProtectionPresetId,
-  ProtectionWorkspacePolicy,
+import {
+  BUILT_IN_PRESETS,
+  type ProtectionPresetId,
+  type ProtectionWorkspacePolicy,
 } from "../policy/protection-rules";
 import { getRecentWorkspaces, addRecentWorkspace } from "../config/recent-workspaces";
 import { loadConfig, saveConfig, type AppConfig } from "../config/app-config";
@@ -244,6 +245,10 @@ export function registerIpcHandlers(
   });
 
   // Protection rules
+  safeHandle("protection:list-presets", () => {
+    return BUILT_IN_PRESETS;
+  });
+
   safeHandle("protection:list-rules", () => {
     return policyEngine.listRules();
   });

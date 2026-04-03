@@ -18,12 +18,14 @@ import {
 import type {
   CompiledProtectionEntry,
   ProtectionMutationResult,
+  ProtectionPreset,
   ProtectionRule,
   ShellProfile,
   TerminalSessionMeta,
   TerminalSessionReplacement,
   TerminalTrustState,
 } from "./lib/types";
+import { shouldApplyProtectionRefreshResult } from "./lib/protection-refresh";
 import "./lib/types";
 import "./styles/filetree.css";
 import "./styles/welcome.css";
@@ -139,6 +141,7 @@ export function App() {
   const [layoutMode, setLayoutMode] = useState<TerminalLayoutMode>("horizontal");
   const [workspacePath, setWorkspacePath] = useState<string | null>(null);
   const [protectedPaths, setProtectedPaths] = useState<Set<string>>(new Set());
+  const [protectionPresets, setProtectionPresets] = useState<ProtectionPreset[]>([]);
   const [protectionRules, setProtectionRules] = useState<ProtectionRule[]>([]);
   const [compiledProtections, setCompiledProtections] = useState<CompiledProtectionEntry[]>([]);
   const [focusedSourceRuleId, setFocusedSourceRuleId] = useState<string | null>(null);
@@ -159,6 +162,8 @@ export function App() {
   const nextLayoutSlotRef = useRef(1);
   const toastTimeoutRef = useRef<number | null>(null);
   const bootstrappedWorkspaceRef = useRef<string | null>(null);
+  const latestProtectionRefreshRequestRef = useRef(0);
+  const workspacePathRef = useRef<string | null>(null);
 
   const createLayoutSlotKey = useCallback(() => {
     const nextValue = nextLayoutSlotRef.current++;
@@ -180,6 +185,10 @@ export function App() {
       toastTimeoutRef.current = null;
     }, 2200);
   }, []);
+
+  useEffect(() => {
+    workspacePathRef.current = workspacePath;
+  }, [workspacePath]);
 
   useEffect(() => {
     return () => {
@@ -224,19 +233,46 @@ export function App() {
   }, []);
 
   const refreshProtectionState = useCallback(async () => {
-    if (!workspacePath) {
-      setProtectedPaths(new Set());
-      setProtectionRules([]);
-      setCompiledProtections([]);
+    const requestedWorkspacePath = workspacePath;
+    const requestId = latestProtectionRefreshRequestRef.current + 1;
+    latestProtectionRefreshRequestRef.current = requestId;
+
+    if (!requestedWorkspacePath) {
+      if (
+        shouldApplyProtectionRefreshResult({
+          requestedWorkspacePath,
+          currentWorkspacePath: workspacePathRef.current,
+          requestId,
+          latestRequestId: latestProtectionRefreshRequestRef.current,
+        })
+      ) {
+        setProtectionPresets([]);
+        setProtectedPaths(new Set());
+        setProtectionRules([]);
+        setCompiledProtections([]);
+      }
       return;
     }
 
-    const [paths, rules, compiled] = await Promise.all([
+    const [paths, presets, rules, compiled] = await Promise.all([
       window.electronAPI.policyList(),
+      window.electronAPI.protectionListPresets(),
       window.electronAPI.protectionListRules(),
       window.electronAPI.protectionListCompiled(),
     ]);
 
+    if (
+      !shouldApplyProtectionRefreshResult({
+        requestedWorkspacePath,
+        currentWorkspacePath: workspacePathRef.current,
+        requestId,
+        latestRequestId: latestProtectionRefreshRequestRef.current,
+      })
+    ) {
+      return;
+    }
+
+    setProtectionPresets(presets);
     setProtectedPaths(new Set(paths));
     setProtectionRules(rules);
     setCompiledProtections(compiled);
@@ -449,12 +485,14 @@ export function App() {
   }
 
   async function handleRemoveProtectionRule(ruleId: string): Promise<boolean> {
-    const removed = await window.electronAPI.protectionRemoveRule(ruleId);
-    if (removed) {
+    let removed = false;
+    try {
+      removed = await window.electronAPI.protectionRemoveRule(ruleId);
+      return removed;
+    } finally {
       await refreshProtectionState();
+      showToast(removed ? "Rule removed" : "Rule not found");
     }
-    showToast(removed ? "Rule removed" : "Rule not found");
-    return removed;
   }
 
   function handleFocusSource(ruleId: string) {
@@ -777,6 +815,7 @@ export function App() {
           ) : (
             <ProtectionCenter
               rootPath={workspacePath}
+              presets={protectionPresets}
               rules={protectionRules}
               compiledEntries={compiledProtections}
               focusedSourceRuleId={focusedSourceRuleId}

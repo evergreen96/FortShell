@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from "electron";
 import type { TerminalSessionRuntime } from "./core/terminal/session-runtime";
 import type {
   CompiledProtectionEntry,
+  ProtectionPreset,
   ProtectionPresetId,
   ProtectionRule,
   ProtectionWorkspacePolicy,
@@ -132,6 +133,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   policyList: () => ipcRenderer.invoke("policy:list"),
   policyCheck: (filePath: string) =>
     ipcRenderer.invoke("policy:check", filePath),
+  protectionListPresets: () =>
+    ipcRenderer.invoke("protection:list-presets") as Promise<ProtectionPreset[]>,
   protectionListRules: () => ipcRenderer.invoke("protection:list-rules") as Promise<ProtectionRule[]>,
   protectionListCompiled: () =>
     ipcRenderer.invoke("protection:list-compiled") as Promise<CompiledProtectionEntry[]>,

@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { BUILT_IN_PRESETS } from "../../../main/core/policy/protection-rules";
 import type {
   CompiledProtectionEntry,
   ProtectionMutationResult,
+  ProtectionPreset,
   ProtectionPresetId,
   ProtectionRule,
   WorkspaceSearchResult,
@@ -10,6 +10,7 @@ import type {
 
 type ProtectionCenterProps = {
   rootPath: string;
+  presets: ProtectionPreset[];
   rules: ProtectionRule[];
   compiledEntries: CompiledProtectionEntry[];
   focusedSourceRuleId: string | null;
@@ -25,6 +26,32 @@ export function getProtectionAction(
   entry: CompiledProtectionEntry
 ): "remove" | "view-source" {
   return entry.canRemoveDirectly ? "remove" : "view-source";
+}
+
+type BlockedSearchEntry = {
+  relativePath: string;
+  sourceLabel: string;
+  reason: "duplicate" | "contained";
+};
+
+export function getRemovalImpactMessage(affectedPathCount: number): string {
+  return `Remove this rule? It will unshield ${affectedPathCount} concrete path${affectedPathCount === 1 ? "" : "s"}.`;
+}
+
+export function getBlockedSearchSummary(
+  blockedEntries: readonly BlockedSearchEntry[]
+): string {
+  if (blockedEntries.length === 0) {
+    return "";
+  }
+
+  const details = blockedEntries.map((entry) => {
+    const reasonText =
+      entry.reason === "contained" ? "is already covered by" : "is already protected by";
+    return `${entry.relativePath} ${reasonText} ${entry.sourceLabel}.`;
+  });
+
+  return `Blocked: ${details.join(" ")}`;
 }
 
 function normalizeExtensions(input: string): string[] {
@@ -77,6 +104,15 @@ function getCoveringEntry(
   return null;
 }
 
+function getBlockedReason(
+  targetPath: string,
+  coveringEntry: CompiledProtectionEntry
+): "duplicate" | "contained" {
+  return normalizePath(targetPath) === normalizePath(coveringEntry.path)
+    ? "duplicate"
+    : "contained";
+}
+
 function getPresetFeedback(
   label: string,
   result: ProtectionMutationResult
@@ -124,9 +160,11 @@ function getRuleBadgeLabel(rule: ProtectionRule): string {
   return rule.kind === "directory" ? "Folder Rule" : "Path Rule";
 }
 
-function getRuleDetail(rule: ProtectionRule): string {
+function getRuleDetail(rule: ProtectionRule, presets: readonly ProtectionPreset[]): string {
   if (rule.kind === "preset") {
-    return BUILT_IN_PRESETS.find((preset) => preset.id === rule.presetId)?.description ?? "Built-in preset";
+    return (
+      presets.find((preset) => preset.id === rule.presetId)?.description ?? "Built-in preset"
+    );
   }
 
   if (rule.kind === "extension") {
@@ -142,6 +180,7 @@ function getRuleDetail(rule: ProtectionRule): string {
 
 export function ProtectionCenter({
   rootPath,
+  presets,
   rules,
   compiledEntries,
   focusedSourceRuleId,
@@ -158,12 +197,13 @@ export function ProtectionCenter({
   const [manualFeedback, setManualFeedback] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<WorkspaceSearchResult[]>([]);
-  const [searchBlockedMessage, setSearchBlockedMessage] = useState("");
+  const [blockedSearchEntries, setBlockedSearchEntries] = useState<BlockedSearchEntry[]>([]);
   const [loadingSearch, setLoadingSearch] = useState(false);
   const [pendingPresetId, setPendingPresetId] = useState<ProtectionPresetId | null>(null);
   const [pendingRuleId, setPendingRuleId] = useState<string | null>(null);
   const [pendingManualPath, setPendingManualPath] = useState<string | null>(null);
   const [pendingBatchAdd, setPendingBatchAdd] = useState(false);
+  const [confirmingRuleId, setConfirmingRuleId] = useState<string | null>(null);
   const sourceRuleRefs = useRef(new Map<string, HTMLElement>());
 
   const presetRules = useMemo(
@@ -222,7 +262,7 @@ export function ProtectionCenter({
 
     if (!trimmed) {
       setSearchResults([]);
-      setSearchBlockedMessage("");
+      setBlockedSearchEntries([]);
       setLoadingSearch(false);
       return () => {
         disposed = true;
@@ -243,21 +283,23 @@ export function ProtectionCenter({
           }
 
           const visibleResults: WorkspaceSearchResult[] = [];
-          let blockedMessage = "";
+          const blockedEntries: BlockedSearchEntry[] = [];
 
           for (const entry of results) {
             const coveringEntry = getCoveringEntry(entry.path, compiledEntries);
             if (coveringEntry) {
-              if (!blockedMessage) {
-                blockedMessage = `${entry.relativePath} is already protected by ${coveringEntry.sourceLabel}.`;
-              }
+              blockedEntries.push({
+                relativePath: entry.relativePath,
+                sourceLabel: coveringEntry.sourceLabel,
+                reason: getBlockedReason(entry.path, coveringEntry),
+              });
               continue;
             }
             visibleResults.push(entry);
           }
 
           setSearchResults(visibleResults);
-          setSearchBlockedMessage(blockedMessage);
+          setBlockedSearchEntries(blockedEntries);
           setLoadingSearch(false);
         })
         .catch(() => {
@@ -265,7 +307,7 @@ export function ProtectionCenter({
             return;
           }
           setSearchResults([]);
-          setSearchBlockedMessage("");
+          setBlockedSearchEntries([]);
           setLoadingSearch(false);
         });
     }, 120);
@@ -340,7 +382,7 @@ export function ProtectionCenter({
       if (changed) {
         setSearchQuery("");
         setSearchResults([]);
-        setSearchBlockedMessage("");
+        setBlockedSearchEntries([]);
         setManualFeedback(`Protected ${entry.relativePath}.`);
         onClearFocusedSource();
         return;
@@ -362,6 +404,7 @@ export function ProtectionCenter({
   }
 
   async function handleRemoveRule(ruleId: string, feedbackSetter: (value: string) => void) {
+    setConfirmingRuleId(null);
     setPendingRuleId(ruleId);
     try {
       const removed = await onRemoveRule(ruleId);
@@ -372,6 +415,48 @@ export function ProtectionCenter({
     } finally {
       setPendingRuleId(null);
     }
+  }
+
+  function renderRemoveAction(
+    ruleId: string,
+    affectedPathCount: number,
+    feedbackSetter: (value: string) => void
+  ) {
+    if (confirmingRuleId === ruleId) {
+      return (
+        <div className="protection-remove-confirm">
+          <span className="protection-remove-confirm-copy">
+            {getRemovalImpactMessage(affectedPathCount)}
+          </span>
+          <div className="protection-remove-confirm-actions">
+            <button
+              className="protection-table-remove"
+              disabled={pendingRuleId === ruleId}
+              onClick={() => handleRemoveRule(ruleId, feedbackSetter)}
+            >
+              {pendingRuleId === ruleId ? "Removing..." : "Confirm"}
+            </button>
+            <button
+              className="protection-secondary-action"
+              disabled={pendingRuleId === ruleId}
+              onClick={() => setConfirmingRuleId(null)}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <button
+        className="protection-secondary-action protection-secondary-action-danger"
+        disabled={pendingRuleId === ruleId}
+        onClick={() => setConfirmingRuleId(ruleId)}
+      >
+        Remove
+      </button>
+    );
   }
 
   return (
@@ -418,7 +503,7 @@ export function ProtectionCenter({
             <p>Apply built-in coverage immediately. Reapplying gives feedback instead of duplicate rules.</p>
           </div>
           <div className="protection-preset-grid">
-            {BUILT_IN_PRESETS.map((preset) => {
+            {presets.map((preset) => {
               const sourceRule = presetRules.get(preset.id);
               const matchCount = sourceRule ? compiledCountByRuleId.get(sourceRule.id) ?? 0 : 0;
               const isFocused = sourceRule?.id === focusedSourceRuleId;
@@ -454,13 +539,7 @@ export function ProtectionCenter({
                       {pendingPresetId === preset.id ? "Applying..." : "Apply"}
                     </button>
                     {sourceRule ? (
-                      <button
-                        className="protection-secondary-action protection-secondary-action-danger"
-                        disabled={pendingRuleId === sourceRule.id}
-                        onClick={() => handleRemoveRule(sourceRule.id, setPresetFeedback)}
-                      >
-                        {pendingRuleId === sourceRule.id ? "Removing..." : "Remove"}
-                      </button>
+                      renderRemoveAction(sourceRule.id, matchCount, setPresetFeedback)
                     ) : null}
                   </div>
                 </article>
@@ -521,15 +600,13 @@ export function ProtectionCenter({
                         <span className="protection-rule-badge">{getRuleBadgeLabel(rule)}</span>
                         <span>{compiledCountByRuleId.get(rule.id) ?? 0} matches</span>
                       </div>
-                      <strong>{getRuleDetail(rule)}</strong>
+                      <strong>{getRuleDetail(rule, presets)}</strong>
                     </div>
-                    <button
-                      className="protection-secondary-action protection-secondary-action-danger"
-                      disabled={pendingRuleId === rule.id}
-                      onClick={() => handleRemoveRule(rule.id, setBatchFeedback)}
-                    >
-                      {pendingRuleId === rule.id ? "Removing..." : "Remove"}
-                    </button>
+                    {renderRemoveAction(
+                      rule.id,
+                      compiledCountByRuleId.get(rule.id) ?? 0,
+                      setBatchFeedback
+                    )}
                   </article>
                 ))
               )}
@@ -569,7 +646,8 @@ export function ProtectionCenter({
                     {loadingSearch
                       ? "Searching workspace..."
                       : searchQuery.trim()
-                        ? searchBlockedMessage || "No matching unprotected paths found."
+                        ? getBlockedSearchSummary(blockedSearchEntries) ||
+                          "No matching unprotected paths found."
                         : "Search for a file or folder to add a direct rule."}
                   </div>
                 ) : (
@@ -594,6 +672,11 @@ export function ProtectionCenter({
                   ))
                 )}
               </div>
+              {blockedSearchEntries.length > 0 && searchResults.length > 0 ? (
+                <p className="protection-inline-note">
+                  {getBlockedSearchSummary(blockedSearchEntries)}
+                </p>
+              ) : null}
             </div>
             <div className="protection-manual-rules">
               <div className="protection-subsection-heading">
@@ -618,15 +701,13 @@ export function ProtectionCenter({
                           <span className="protection-rule-badge">{getRuleBadgeLabel(rule)}</span>
                           <span>{compiledCountByRuleId.get(rule.id) ?? 0} matches</span>
                         </div>
-                        <strong>{getRuleDetail(rule)}</strong>
+                        <strong>{getRuleDetail(rule, presets)}</strong>
                       </div>
-                      <button
-                        className="protection-secondary-action protection-secondary-action-danger"
-                        disabled={pendingRuleId === rule.id}
-                        onClick={() => handleRemoveRule(rule.id, setManualFeedback)}
-                      >
-                        {pendingRuleId === rule.id ? "Removing..." : "Remove"}
-                      </button>
+                      {renderRemoveAction(
+                        rule.id,
+                        compiledCountByRuleId.get(rule.id) ?? 0,
+                        setManualFeedback
+                      )}
                     </article>
                   ))
                 )}
@@ -701,13 +782,11 @@ export function ProtectionCenter({
                         </td>
                         <td className="protection-table-actions">
                           {action === "remove" ? (
-                            <button
-                              className="protection-table-remove"
-                              disabled={pendingRuleId === entry.sourceRuleId}
-                              onClick={() => handleRemoveRule(entry.sourceRuleId, setManualFeedback)}
-                            >
-                              {pendingRuleId === entry.sourceRuleId ? "Removing..." : "Remove"}
-                            </button>
+                            renderRemoveAction(
+                              entry.sourceRuleId,
+                              compiledCountByRuleId.get(entry.sourceRuleId) ?? 0,
+                              setManualFeedback
+                            )
                           ) : (
                             <button
                               className="protection-table-view-source"
