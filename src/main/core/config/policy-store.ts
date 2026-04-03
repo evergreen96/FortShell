@@ -216,6 +216,15 @@ export function parseImportedWorkspacePolicy(
   raw: string,
   sourcePath: string
 ): StoredPolicyFileV3 | null {
+  try {
+    const candidate = JSON.parse(raw) as Record<string, unknown>;
+    if (!candidate || typeof candidate !== "object" || candidate.version !== 3) {
+      return null;
+    }
+  } catch {
+    return null;
+  }
+
   const parsed = parseStoredPolicy(raw, sourcePath, { strictRules: true });
   if (!parsed || !("rules" in parsed) || parsed.version !== 3) {
     return null;
