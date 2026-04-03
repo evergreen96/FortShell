@@ -382,6 +382,122 @@ describe("PolicyEngine", () => {
     expect(await engine.removeRule(rules[0].id)).toBe(false);
   });
 
+  it("applies preset, extension, and directory rules through the rule APIs", async () => {
+    await engine.setProjectRoot(tmpDir);
+
+    const envPath = path.join(tmpDir, ".env");
+    const certPath = path.join(tmpDir, "cert.pem");
+    const secretsDir = path.join(tmpDir, "secrets");
+    const secretFile = path.join(secretsDir, "db.txt");
+    fs.writeFileSync(envPath, "env");
+    fs.writeFileSync(certPath, "pem");
+    fs.mkdirSync(secretsDir);
+    fs.writeFileSync(secretFile, "secret");
+
+    expect(await engine.applyPreset("env-files")).toEqual({ changed: true });
+    expect(await engine.addExtensionRule([".pem"])).toEqual({ changed: true });
+    expect(await engine.addDirectoryRule(secretsDir)).toEqual({ changed: true });
+
+    expect(engine.listRules()).toHaveLength(3);
+    expect(engine.listRules().map((rule) => rule.kind)).toEqual([
+      "preset",
+      "extension",
+      "directory",
+    ]);
+    expect(engine.listRules().map((rule) => rule.source)).toEqual([
+      "preset",
+      "extension",
+      "directory",
+    ]);
+    expect(engine.listCompiledEntries().map((entry) => entry.relativePath)).toEqual([
+      ".env",
+      "cert.pem",
+      "secrets",
+      "secrets/db.txt",
+    ]);
+    expect(engine.exportWorkspacePolicy()).toMatchObject({
+      version: 3,
+      workspaceRoot: fs.realpathSync(tmpDir),
+      rules: expect.arrayContaining([
+        expect.objectContaining({ kind: "preset", presetId: "env-files" }),
+        expect.objectContaining({ kind: "extension", extensions: [".pem"] }),
+        expect.objectContaining({
+          kind: "directory",
+          targetPath: "secrets",
+        }),
+      ]),
+      updatedAt: expect.any(String),
+    });
+  });
+
+  it("replaces the workspace rule set when importing and exports the replacement", async () => {
+    await engine.setProjectRoot(tmpDir);
+
+    const originalFile = path.join(tmpDir, "original.txt");
+    const importedFile = path.join(tmpDir, "imported.txt");
+    fs.writeFileSync(originalFile, "original");
+    fs.writeFileSync(importedFile, "imported");
+
+    await engine.addPathRule(originalFile);
+
+    expect(
+      await engine.importWorkspacePolicy({
+        version: 3,
+        workspaceRoot: fs.realpathSync(tmpDir),
+        rules: [
+          {
+            id: "imported-rule",
+            kind: "path",
+            source: "import",
+            targetPath: "imported.txt",
+            createdAt: "2026-04-03T00:00:00.000Z",
+            updatedAt: "2026-04-03T00:00:00.000Z",
+          },
+        ],
+        updatedAt: "2026-04-03T00:00:00.000Z",
+      })
+    ).toEqual({ changed: true });
+
+    expect(engine.listRules()).toHaveLength(1);
+    expect(engine.listRules()[0]).toMatchObject({
+      id: "imported-rule",
+      kind: "path",
+      source: "import",
+      targetPath: "imported.txt",
+    });
+    expect(engine.isProtected(originalFile)).toBe(false);
+    expect(engine.isProtected(importedFile)).toBe(true);
+    expect(engine.exportWorkspacePolicy()).toMatchObject({
+      version: 3,
+      workspaceRoot: fs.realpathSync(tmpDir),
+      rules: [
+        {
+          id: "imported-rule",
+          kind: "path",
+          source: "import",
+          targetPath: "imported.txt",
+        },
+      ],
+    });
+  });
+
+  it("recomputes dynamic rules when the workspace changes", async () => {
+    await engine.setProjectRoot(tmpDir);
+
+    const certPath = path.join(tmpDir, "cert.pem");
+    expect(await engine.addExtensionRule([".pem"])).toEqual({ changed: true });
+    expect(engine.listCompiledEntries()).toEqual([]);
+
+    fs.writeFileSync(certPath, "pem");
+
+    expect(await engine.recomputeDynamicRules()).toBe(true);
+    expect(engine.listCompiledEntries().map((entry) => entry.relativePath)).toEqual([
+      "cert.pem",
+    ]);
+    expect(engine.isProtected(certPath)).toBe(true);
+    expect(engine.getPolicyRevision()).toBe(1);
+  });
+
   it("does not mutate state when addPathRule enforcer application fails", async () => {
     await engine.setProjectRoot(tmpDir);
 

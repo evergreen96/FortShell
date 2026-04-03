@@ -69,6 +69,13 @@ export type CompiledProtectionEntry = WorkspaceProtectionEntry & {
   sourceLabel: string;
 };
 
+export type ProtectionWorkspacePolicy = {
+  version: 3;
+  workspaceRoot: string;
+  rules: readonly ProtectionRule[];
+  updatedAt: string;
+};
+
 export const BUILT_IN_PRESETS = [
   {
     id: "env-files",

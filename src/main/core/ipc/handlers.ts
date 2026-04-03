@@ -10,6 +10,10 @@ import {
 } from "../workspace/file-indexer";
 import { FileWatcher } from "../workspace/file-watcher";
 import { PolicyEngine } from "../policy/policy-engine";
+import type {
+  ProtectionPresetId,
+  ProtectionWorkspacePolicy,
+} from "../policy/protection-rules";
 import { getRecentWorkspaces, addRecentWorkspace } from "../config/recent-workspaces";
 import { loadConfig, saveConfig, type AppConfig } from "../config/app-config";
 
@@ -18,6 +22,18 @@ function notifyPolicyChanged(): void {
     if (!win.isDestroyed()) {
       win.webContents.send("policy:changed");
     }
+  }
+}
+
+function notifyPolicyMutation(
+  ptyManager: PtyManager,
+  policyEngine: PolicyEngine,
+  previousRevision: number
+): void {
+  notifyPolicyChanged();
+  if (policyEngine.getPolicyRevision() !== previousRevision) {
+    ptyManager.markPolicyRevisionChanged(policyEngine.getPolicyRevision());
+    notifySessionStateChanged(ptyManager, policyEngine);
   }
 }
 
@@ -60,6 +76,13 @@ export function registerIpcHandlers(
   ptyManager.setPolicyRevision(policyEngine.getPolicyRevision());
   ptyManager.onSessionStateChanged(() => {
     notifySessionStateChanged(ptyManager, policyEngine);
+  });
+  fileWatcher.onWorkspaceChanged(async () => {
+    const previousRevision = policyEngine.getPolicyRevision();
+    const changed = await policyEngine.recomputeDynamicRules();
+    if (changed) {
+      notifyPolicyMutation(ptyManager, policyEngine, previousRevision);
+    }
   });
 
   // Terminal
@@ -114,8 +137,9 @@ export function registerIpcHandlers(
     if (result.canceled || result.filePaths.length === 0) return null;
     const dirPath = result.filePaths[0];
     const resolvedPath = fs.realpathSync(dirPath);
+    const previousRevision = policyEngine.getPolicyRevision();
     await policyEngine.setProjectRoot(resolvedPath);
-    ptyManager.markPolicyRevisionChanged(policyEngine.getPolicyRevision());
+    notifyPolicyMutation(ptyManager, policyEngine, previousRevision);
     fileWatcher.watch(resolvedPath);
     addRecentWorkspace(resolvedPath);
     return resolvedPath;
@@ -123,8 +147,9 @@ export function registerIpcHandlers(
 
   safeHandle("workspace:set-root", async (_event, dirPath: string) => {
     const resolvedPath = fs.realpathSync(dirPath);
+    const previousRevision = policyEngine.getPolicyRevision();
     await policyEngine.setProjectRoot(resolvedPath);
-    ptyManager.markPolicyRevisionChanged(policyEngine.getPolicyRevision());
+    notifyPolicyMutation(ptyManager, policyEngine, previousRevision);
     fileWatcher.watch(resolvedPath);
     addRecentWorkspace(resolvedPath);
     return resolvedPath;
@@ -158,19 +183,19 @@ export function registerIpcHandlers(
 
   // Policy
   safeHandle("policy:set", async (_event, filePath: string) => {
+    const previousRevision = policyEngine.getPolicyRevision();
     const result = await policyEngine.protect(filePath);
     if (result) {
-      ptyManager.markPolicyRevisionChanged(policyEngine.getPolicyRevision());
-      notifyPolicyChanged();
+      notifyPolicyMutation(ptyManager, policyEngine, previousRevision);
     }
     return result;
   });
 
   safeHandle("policy:remove", async (_event, filePath: string) => {
+    const previousRevision = policyEngine.getPolicyRevision();
     const result = await policyEngine.unprotect(filePath);
     if (result) {
-      ptyManager.markPolicyRevisionChanged(policyEngine.getPolicyRevision());
-      notifyPolicyChanged();
+      notifyPolicyMutation(ptyManager, policyEngine, previousRevision);
     }
     return result;
   });
@@ -181,6 +206,71 @@ export function registerIpcHandlers(
 
   safeHandle("policy:check", (_event, filePath: string) => {
     return policyEngine.isProtected(filePath);
+  });
+
+  // Protection rules
+  safeHandle("protection:list-rules", () => {
+    return policyEngine.listRules();
+  });
+
+  safeHandle("protection:list-compiled", () => {
+    return policyEngine.listCompiledEntries();
+  });
+
+  safeHandle("protection:apply-preset", async (_event, presetId: string) => {
+    const previousRevision = policyEngine.getPolicyRevision();
+    const result = await policyEngine.applyPreset(presetId as ProtectionPresetId);
+    if (result.changed) {
+      notifyPolicyMutation(ptyManager, policyEngine, previousRevision);
+    }
+    return result;
+  });
+
+  safeHandle(
+    "protection:add-extension-rule",
+    async (_event, extensions: string[]) => {
+      const previousRevision = policyEngine.getPolicyRevision();
+      const result = await policyEngine.addExtensionRule(extensions);
+      if (result.changed) {
+        notifyPolicyMutation(ptyManager, policyEngine, previousRevision);
+      }
+      return result;
+    }
+  );
+
+  safeHandle("protection:add-directory-rule", async (_event, targetPath: string) => {
+    const previousRevision = policyEngine.getPolicyRevision();
+    const result = await policyEngine.addDirectoryRule(targetPath);
+    if (result.changed) {
+      notifyPolicyMutation(ptyManager, policyEngine, previousRevision);
+    }
+    return result;
+  });
+
+  safeHandle("protection:import", async (_event, filePath: string) => {
+    const raw = fs.readFileSync(filePath, "utf-8");
+    const parsedData = JSON.parse(raw);
+    if (
+      !parsedData ||
+      typeof parsedData !== "object" ||
+      (parsedData as Record<string, unknown>).version !== 3 ||
+      typeof (parsedData as Record<string, unknown>).workspaceRoot !== "string" ||
+      !Array.isArray((parsedData as Record<string, unknown>).rules)
+    ) {
+      throw new Error("Invalid protection policy file");
+    }
+
+    const parsed = parsedData as ProtectionWorkspacePolicy;
+    const previousRevision = policyEngine.getPolicyRevision();
+    const result = await policyEngine.importWorkspacePolicy(parsed);
+    if (result.changed) {
+      notifyPolicyMutation(ptyManager, policyEngine, previousRevision);
+    }
+    return result;
+  });
+
+  safeHandle("protection:export", () => {
+    return policyEngine.exportWorkspacePolicy();
   });
 
   // Config

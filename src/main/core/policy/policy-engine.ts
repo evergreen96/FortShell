@@ -9,7 +9,10 @@ import { compileProtectionRules } from "./protection-compiler";
 import {
   BUILT_IN_PRESETS,
   type CompiledProtectionEntry,
+  type ProtectionPresetId,
   type ProtectionRule,
+  type ProtectionWorkspacePolicy,
+  getProtectionPresetById,
 } from "./protection-rules";
 
 type PolicyEngineOptions = {
@@ -23,6 +26,11 @@ type PolicySnapshot = {
   protectedDirectories: Set<string>;
   protectedPaths: Set<string>;
   rules: ProtectionRule[];
+};
+
+type PolicyMutationResult = {
+  changed: boolean;
+  reason?: string;
 };
 
 function isRelativeToRoot(rootPath: string, candidatePath: string): boolean {
@@ -77,6 +85,74 @@ function cloneRule(rule: ProtectionRule): ProtectionRule {
   }
 
   return { ...rule };
+}
+
+function normalizeExtensionTokens(extensions: readonly string[]): string[] {
+  return Array.from(
+    new Set(
+      extensions
+        .map((extension) => extension.trim().toLowerCase())
+        .filter((extension) => extension.length > 0)
+        .map((extension) => (extension.startsWith(".") ? extension : `.${extension}`))
+    )
+  ).sort();
+}
+
+function serializeRuleForComparison(
+  projectRoot: string | null,
+  rule: ProtectionRule
+): string {
+  if (rule.kind === "extension") {
+    return JSON.stringify({
+      id: rule.id,
+      kind: rule.kind,
+      source: rule.source,
+      extensions: normalizeExtensionTokens(rule.extensions),
+      createdAt: rule.createdAt ?? "",
+      updatedAt: rule.updatedAt ?? "",
+    });
+  }
+
+  if (rule.kind === "preset") {
+    return JSON.stringify({
+      id: rule.id,
+      kind: rule.kind,
+      source: rule.source,
+      presetId: rule.presetId,
+      createdAt: rule.createdAt ?? "",
+      updatedAt: rule.updatedAt ?? "",
+    });
+  }
+
+  return JSON.stringify({
+    id: rule.id,
+    kind: rule.kind,
+    source: rule.source,
+    targetPath: resolveRuleTargetPath(projectRoot, rule) ?? rule.targetPath,
+    createdAt: rule.createdAt ?? "",
+    updatedAt: rule.updatedAt ?? "",
+  });
+}
+
+function areRuleSetsEqual(
+  projectRoot: string | null,
+  leftRules: readonly ProtectionRule[],
+  rightRules: readonly ProtectionRule[]
+): boolean {
+  if (leftRules.length !== rightRules.length) {
+    return false;
+  }
+
+  for (let index = 0; index < leftRules.length; index += 1) {
+    if (
+      serializeRuleForComparison(projectRoot, leftRules[index]) !==
+      serializeRuleForComparison(projectRoot, rightRules[index])
+    ) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 function buildWorkspaceEntries(projectRoot: string) {
@@ -145,24 +221,111 @@ export class PolicyEngine {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
-    const nextSnapshot = this.buildPolicySnapshot(this.projectRoot, [
-      ...this.rules,
-      nextRule,
-    ]);
-    const previousContext = this.getEffectivePolicyContext();
+    return this.replaceRules([...this.rules, nextRule]);
+  }
 
-    await this.applyAddedEnforcerTargets(
-      this.getCurrentSnapshot().enforcerTargets,
-      nextSnapshot.enforcerTargets
-    );
-
-    this.commitPolicySnapshot(nextSnapshot);
-    if (previousContext !== this.getEffectivePolicyContext()) {
-      this.bumpPolicyRevision();
+  async applyPreset(
+    presetId: ProtectionPresetId
+  ): Promise<PolicyMutationResult> {
+    if (!getProtectionPresetById(presetId, BUILT_IN_PRESETS)) {
+      return { changed: false, reason: "unknown-preset" };
     }
 
-    this.save();
-    return { changed: true };
+    if (this.rules.some((rule) => rule.kind === "preset" && rule.presetId === presetId)) {
+      return { changed: false, reason: "already-exists" };
+    }
+
+    return this.replaceRules([
+      ...this.rules,
+      {
+        id: crypto.randomUUID(),
+        kind: "preset",
+        source: "preset",
+        presetId,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+    ]);
+  }
+
+  async addExtensionRule(extensions: string[]): Promise<PolicyMutationResult> {
+    const normalizedExtensions = normalizeExtensionTokens(extensions);
+    if (normalizedExtensions.length === 0) {
+      return { changed: false, reason: "invalid-extension" };
+    }
+
+    const hasDuplicate = this.rules.some(
+      (rule) =>
+        rule.kind === "extension" &&
+        normalizeExtensionTokens(rule.extensions).join("\u0000") ===
+          normalizedExtensions.join("\u0000")
+    );
+    if (hasDuplicate) {
+      return { changed: false, reason: "already-exists" };
+    }
+
+    return this.replaceRules([
+      ...this.rules,
+      {
+        id: crypto.randomUUID(),
+        kind: "extension",
+        source: "extension",
+        extensions: normalizedExtensions,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+    ]);
+  }
+
+  async addDirectoryRule(targetPath: string): Promise<PolicyMutationResult> {
+    const normalized = resolveRealPath(targetPath);
+    if (this.isProtected(normalized)) {
+      return { changed: false, reason: "already-protected" };
+    }
+
+    return this.replaceRules([
+      ...this.rules,
+      {
+        id: crypto.randomUUID(),
+        kind: "directory",
+        source: "directory",
+        targetPath: toStoredTargetPath(this.projectRoot, normalized),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+    ]);
+  }
+
+  async importWorkspacePolicy(
+    policy: ProtectionWorkspacePolicy
+  ): Promise<PolicyMutationResult> {
+    if (policy.version !== 3) {
+      return { changed: false, reason: "unsupported-version" };
+    }
+
+    if (!this.projectRoot) {
+      return { changed: false, reason: "workspace-not-set" };
+    }
+
+    const importedRoot = resolveRealPath(policy.workspaceRoot);
+    if (importedRoot !== this.projectRoot) {
+      return { changed: false, reason: "workspace-root-mismatch" };
+    }
+
+    return this.replaceRules(policy.rules.map((rule) => cloneRule(rule)));
+  }
+
+  exportWorkspacePolicy(): ProtectionWorkspacePolicy | null {
+    if (!this.projectRoot) {
+      return null;
+    }
+
+    return {
+      version: 3,
+      workspaceRoot: this.projectRoot,
+      rules: this.rules.map((rule) => cloneRule(rule)),
+      updatedAt: new Date().toISOString(),
+    };
   }
 
   async removeRule(ruleId: string): Promise<boolean> {
@@ -171,21 +334,8 @@ export class PolicyEngine {
       return false;
     }
 
-    const nextSnapshot = this.buildPolicySnapshot(this.projectRoot, nextRules);
-    const previousContext = this.getEffectivePolicyContext();
-
-    await this.removeDroppedEnforcerTargets(
-      this.getCurrentSnapshot().enforcerTargets,
-      nextSnapshot.enforcerTargets
-    );
-
-    this.commitPolicySnapshot(nextSnapshot);
-    if (previousContext !== this.getEffectivePolicyContext()) {
-      this.bumpPolicyRevision();
-    }
-
-    this.save();
-    return true;
+    const result = await this.replaceRules(nextRules);
+    return result.changed;
   }
 
   listRules(): ProtectionRule[] {
@@ -194,6 +344,34 @@ export class PolicyEngine {
 
   listCompiledEntries(): CompiledProtectionEntry[] {
     return this.compiledEntries.map((entry) => ({ ...entry }));
+  }
+
+  async recomputeDynamicRules(): Promise<boolean> {
+    if (!this.projectRoot) {
+      return false;
+    }
+
+    const currentSnapshot = this.getCurrentSnapshot();
+    const nextSnapshot = this.buildPolicySnapshot(this.projectRoot, this.rules);
+    const previousContext = this.getEffectivePolicyContextForSnapshot(currentSnapshot);
+    const nextContext = this.getEffectivePolicyContextForSnapshot(nextSnapshot);
+
+    if (previousContext === nextContext) {
+      return false;
+    }
+
+    await this.applyAddedEnforcerTargets(
+      currentSnapshot.enforcerTargets,
+      nextSnapshot.enforcerTargets
+    );
+    await this.removeDroppedEnforcerTargets(
+      currentSnapshot.enforcerTargets,
+      nextSnapshot.enforcerTargets
+    );
+
+    this.commitPolicySnapshot(nextSnapshot);
+    this.bumpPolicyRevision();
+    return true;
   }
 
   async setProjectRoot(root: string): Promise<void> {
@@ -273,6 +451,49 @@ export class PolicyEngine {
     if (this.enforcer) {
       await this.enforcer.cleanup();
     }
+  }
+
+  private async replaceRules(
+    nextRules: readonly ProtectionRule[],
+    options: { persist?: boolean } = {}
+  ): Promise<PolicyMutationResult> {
+    const normalizedNextRules = nextRules.map((rule) => cloneRule(rule));
+    const previousSnapshot = this.getCurrentSnapshot();
+    const nextSnapshot = this.buildPolicySnapshot(this.projectRoot, normalizedNextRules);
+    const previousContext = this.getEffectivePolicyContextForSnapshot(previousSnapshot);
+    const nextContext = this.getEffectivePolicyContextForSnapshot(nextSnapshot);
+    const rulesChanged = !areRuleSetsEqual(
+      this.projectRoot,
+      previousSnapshot.rules,
+      normalizedNextRules
+    );
+    const effectiveChanged = previousContext !== nextContext;
+
+    if (!rulesChanged && !effectiveChanged) {
+      return { changed: false };
+    }
+
+    if (this.enforcer?.isAvailable()) {
+      await this.applyAddedEnforcerTargets(
+        previousSnapshot.enforcerTargets,
+        nextSnapshot.enforcerTargets
+      );
+      await this.removeDroppedEnforcerTargets(
+        previousSnapshot.enforcerTargets,
+        nextSnapshot.enforcerTargets
+      );
+    }
+
+    this.commitPolicySnapshot(nextSnapshot);
+    if (effectiveChanged) {
+      this.bumpPolicyRevision();
+    }
+
+    if (options.persist ?? true) {
+      this.save();
+    }
+
+    return { changed: rulesChanged || effectiveChanged };
   }
 
   private save(): void {
@@ -508,7 +729,11 @@ export class PolicyEngine {
     }
 
     const protectedEntries = Array.from(snapshot.protectedPaths).sort();
+    const compiledEntries = snapshot.compiledEntries
+      .map((entry) => entry.path)
+      .sort();
     return JSON.stringify({
+      compiledEntries,
       projectRoot: snapshot.projectRoot,
       protectedEntries,
     });

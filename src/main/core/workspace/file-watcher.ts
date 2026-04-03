@@ -3,9 +3,16 @@ import path from "path";
 import { BrowserWindow } from "electron";
 import { DEFAULT_IGNORE } from "./constants";
 
+type WorkspaceChangePayload = {
+  rootPath: string;
+  eventType: string;
+  filename: string;
+};
+
 export class FileWatcher {
   private watchers = new Map<string, fs.FSWatcher>();
   private debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  private listeners = new Set<(payload: WorkspaceChangePayload) => void | Promise<void>>();
 
   watch(dirPath: string): void {
     this.close();
@@ -42,6 +49,15 @@ export class FileWatcher {
     }
   }
 
+  onWorkspaceChanged(
+    listener: (payload: WorkspaceChangePayload) => void | Promise<void>
+  ): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
   private notifyChange(
     rootPath: string,
     eventType: string,
@@ -50,14 +66,21 @@ export class FileWatcher {
     // Debounce: batch rapid changes
     if (this.debounceTimer) clearTimeout(this.debounceTimer);
     this.debounceTimer = setTimeout(() => {
+      const payload = { rootPath, eventType, filename };
       const windows = BrowserWindow.getAllWindows();
       for (const win of windows) {
         if (!win.isDestroyed()) {
-          win.webContents.send("workspace:changed", {
-            rootPath,
-            eventType,
-            filename,
+          win.webContents.send("workspace:changed", payload);
+        }
+      }
+
+      for (const listener of this.listeners) {
+        try {
+          void Promise.resolve(listener(payload)).catch((err) => {
+            console.warn(`[workspace] Workspace change listener failed:`, err);
           });
+        } catch (err) {
+          console.warn(`[workspace] Workspace change listener failed:`, err);
         }
       }
     }, 300);

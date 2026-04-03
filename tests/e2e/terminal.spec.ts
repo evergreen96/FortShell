@@ -68,6 +68,15 @@ test.describe("Terminal Integration", () => {
     const methods = await page.evaluate(() => {
       const api = (window as any).electronAPI;
       return {
+        hasProtectionListRules: typeof api.protectionListRules === "function",
+        hasProtectionListCompiled: typeof api.protectionListCompiled === "function",
+        hasProtectionApplyPreset: typeof api.protectionApplyPreset === "function",
+        hasProtectionAddExtensionRule:
+          typeof api.protectionAddExtensionRule === "function",
+        hasProtectionAddDirectoryRule:
+          typeof api.protectionAddDirectoryRule === "function",
+        hasProtectionImport: typeof api.protectionImport === "function",
+        hasProtectionExport: typeof api.protectionExport === "function",
         hasTerminalCreate: typeof api.terminalCreate === "function",
         hasTerminalWrite: typeof api.terminalWrite === "function",
         hasTerminalResize: typeof api.terminalResize === "function",
@@ -86,6 +95,13 @@ test.describe("Terminal Integration", () => {
       };
     });
 
+    expect(methods.hasProtectionListRules).toBe(true);
+    expect(methods.hasProtectionListCompiled).toBe(true);
+    expect(methods.hasProtectionApplyPreset).toBe(true);
+    expect(methods.hasProtectionAddExtensionRule).toBe(true);
+    expect(methods.hasProtectionAddDirectoryRule).toBe(true);
+    expect(methods.hasProtectionImport).toBe(true);
+    expect(methods.hasProtectionExport).toBe(true);
     expect(methods.hasTerminalCreate).toBe(true);
     expect(methods.hasTerminalWrite).toBe(true);
     expect(methods.hasTerminalResize).toBe(true);

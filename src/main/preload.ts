@@ -1,5 +1,11 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type { TerminalSessionRuntime } from "./core/terminal/session-runtime";
+import type {
+  CompiledProtectionEntry,
+  ProtectionPresetId,
+  ProtectionRule,
+  ProtectionWorkspacePolicy,
+} from "./core/policy/protection-rules";
 
 type TerminalSessionStatePayload = {
   sessions: TerminalSessionRuntime[];
@@ -126,6 +132,19 @@ contextBridge.exposeInMainWorld("electronAPI", {
   policyList: () => ipcRenderer.invoke("policy:list"),
   policyCheck: (filePath: string) =>
     ipcRenderer.invoke("policy:check", filePath),
+  protectionListRules: () => ipcRenderer.invoke("protection:list-rules") as Promise<ProtectionRule[]>,
+  protectionListCompiled: () =>
+    ipcRenderer.invoke("protection:list-compiled") as Promise<CompiledProtectionEntry[]>,
+  protectionApplyPreset: (presetId: ProtectionPresetId) =>
+    ipcRenderer.invoke("protection:apply-preset", presetId),
+  protectionAddExtensionRule: (extensions: string[]) =>
+    ipcRenderer.invoke("protection:add-extension-rule", extensions),
+  protectionAddDirectoryRule: (targetPath: string) =>
+    ipcRenderer.invoke("protection:add-directory-rule", targetPath),
+  protectionImport: (filePath: string) =>
+    ipcRenderer.invoke("protection:import", filePath),
+  protectionExport: () =>
+    ipcRenderer.invoke("protection:export") as Promise<ProtectionWorkspacePolicy | null>,
 
   // Workspace change listener
   onWorkspaceChanged: (

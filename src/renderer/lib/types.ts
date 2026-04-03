@@ -13,6 +13,76 @@ export type WorkspaceSearchResult = {
   isDirectory: boolean;
 };
 
+export type ProtectionRuleKind = "path" | "directory" | "extension" | "preset";
+
+export type ProtectionRuleSource = "manual" | "directory" | "extension" | "preset" | "import";
+
+export type ProtectionPresetId =
+  | "env-files"
+  | "secrets"
+  | "private-configs"
+  | "certificates"
+  | "keys"
+  | "database-configs";
+
+export type ProtectionPresetRule =
+  | { kind: "path"; value: string }
+  | { kind: "directory"; value: string }
+  | { kind: "extension"; value: string | string[] };
+
+export type ProtectionPreset = {
+  id: ProtectionPresetId;
+  label: string;
+  description: string;
+  rules: readonly ProtectionPresetRule[];
+};
+
+export type ProtectionRuleBase = {
+  id: string;
+  source: ProtectionRuleSource;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type ProtectionPathRule = ProtectionRuleBase & {
+  kind: "path";
+  targetPath: string;
+};
+
+export type ProtectionDirectoryRule = ProtectionRuleBase & {
+  kind: "directory";
+  targetPath: string;
+};
+
+export type ProtectionExtensionRule = ProtectionRuleBase & {
+  kind: "extension";
+  extensions: string[];
+};
+
+export type ProtectionPresetRuleRef = ProtectionRuleBase & {
+  kind: "preset";
+  presetId: ProtectionPresetId;
+};
+
+export type ProtectionRule =
+  | ProtectionPathRule
+  | ProtectionDirectoryRule
+  | ProtectionExtensionRule
+  | ProtectionPresetRuleRef;
+
+export type CompiledProtectionEntry = WorkspaceSearchResult & {
+  sourceRuleId: string;
+  sourceKind: ProtectionRuleKind;
+  sourceLabel: string;
+};
+
+export type ProtectionWorkspacePolicy = {
+  version: 3;
+  workspaceRoot: string;
+  rules: readonly ProtectionRule[];
+  updatedAt: string;
+};
+
 export type TerminalTrustState =
   | "protected"
   | "unprotected"
@@ -113,6 +183,21 @@ export type ElectronAPI = {
   policyRemove: (filePath: string) => Promise<boolean>;
   policyList: () => Promise<string[]>;
   onPolicyChanged: (callback: () => void) => () => void;
+  protectionListRules: () => Promise<ProtectionRule[]>;
+  protectionListCompiled: () => Promise<CompiledProtectionEntry[]>;
+  protectionApplyPreset: (
+    presetId: ProtectionPresetId
+  ) => Promise<{ changed: boolean; reason?: string }>;
+  protectionAddExtensionRule: (
+    extensions: string[]
+  ) => Promise<{ changed: boolean; reason?: string }>;
+  protectionAddDirectoryRule: (
+    targetPath: string
+  ) => Promise<{ changed: boolean; reason?: string }>;
+  protectionImport: (
+    filePath: string
+  ) => Promise<{ changed: boolean; reason?: string }>;
+  protectionExport: () => Promise<ProtectionWorkspacePolicy | null>;
   onToggleSettings: (callback: () => void) => () => void;
   configGet: () => Promise<Record<string, unknown>>;
   configSet: (partial: Record<string, unknown>) => Promise<Record<string, unknown>>;
