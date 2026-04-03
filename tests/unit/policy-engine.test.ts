@@ -258,6 +258,101 @@ describe("PolicyEngine", () => {
     }
   });
 
+  it("cleans up partial restore protections when restoring the previous snapshot also fails", async () => {
+    const previousAPath = path.join(tmpDir, "previous-a.txt");
+    const previousBPath = path.join(tmpDir, "previous-b.txt");
+    fs.writeFileSync(previousAPath, "a");
+    fs.writeFileSync(previousBPath, "b");
+
+    const nextDir = fs.mkdtempSync(path.join(os.tmpdir(), "ai-ide-test-next-"));
+    const nextEnvPath = path.join(nextDir, ".env");
+    const nextSecretPath = path.join(nextDir, "secret.txt");
+    fs.writeFileSync(nextEnvPath, "env");
+    fs.writeFileSync(nextSecretPath, "secret");
+
+    const appliedPaths = new Set<string>();
+    let nextReplayAttempts = 0;
+    let restoringPrevious = false;
+    let previousRestoreAttempts = 0;
+    let cleanupCalls = 0;
+    const fakeEnforcer: PolicyEnforcer = {
+      applyProtection: async (targetPath) => {
+        const nextDirRealPath = fs.realpathSync(nextDir);
+        if (targetPath.startsWith(nextDirRealPath)) {
+          nextReplayAttempts += 1;
+          if (nextReplayAttempts === 2) {
+            restoringPrevious = true;
+            throw new Error("replay failed");
+          }
+        } else if (restoringPrevious) {
+          previousRestoreAttempts += 1;
+          if (previousRestoreAttempts === 2) {
+            throw new Error("restore failed");
+          }
+        }
+
+        appliedPaths.add(targetPath);
+      },
+      removeProtection: async (targetPath) => {
+        appliedPaths.delete(targetPath);
+      },
+      isAvailable: () => true,
+      cleanup: async () => {
+        cleanupCalls += 1;
+        appliedPaths.clear();
+      },
+    };
+    engine.setEnforcer(fakeEnforcer);
+
+    try {
+      await engine.setProjectRoot(tmpDir);
+      await engine.protect(previousAPath);
+      await engine.protect(previousBPath);
+
+      const nextPolicyPath = getWorkspacePolicyPath(nextDir, policyStoreDir);
+      fs.mkdirSync(path.dirname(nextPolicyPath), { recursive: true });
+      fs.writeFileSync(
+        nextPolicyPath,
+        JSON.stringify({
+          version: 3,
+          workspaceRoot: fs.realpathSync(nextDir),
+          rules: [
+            {
+              id: "rule-preset-env",
+              kind: "preset",
+              source: "preset",
+              presetId: "env-files",
+              createdAt: "2026-04-03T00:00:00.000Z",
+              updatedAt: "2026-04-03T00:00:00.000Z",
+            },
+            {
+              id: "rule-secret",
+              kind: "path",
+              source: "manual",
+              targetPath: "secret.txt",
+              createdAt: "2026-04-03T00:00:00.000Z",
+              updatedAt: "2026-04-03T00:00:00.000Z",
+            },
+          ],
+          updatedAt: "2026-04-03T00:00:00.000Z",
+        }),
+        "utf-8"
+      );
+
+      await expect(engine.setProjectRoot(nextDir)).rejects.toThrow("restore failed");
+      expect(cleanupCalls).toBeGreaterThanOrEqual(2);
+      expect(appliedPaths.size).toBe(0);
+      expect(engine.list()).toEqual([]);
+      expect(engine.listRules()).toEqual([]);
+      expect(engine.isProtected(previousAPath)).toBe(false);
+      expect(engine.isProtected(previousBPath)).toBe(false);
+      expect(engine.isProtected(nextEnvPath)).toBe(false);
+      expect(engine.isProtected(nextSecretPath)).toBe(false);
+    } finally {
+      fs.rmSync(nextDir, { recursive: true, force: true });
+    }
+  });
+
   it("adds and removes manual path rules through the rule APIs", async () => {
     await engine.setProjectRoot(tmpDir);
 
@@ -415,6 +510,18 @@ describe("PolicyEngine", () => {
             kind: "path",
             source: "invalid-source",
             targetPath: "ignored-source.txt",
+          },
+          {
+            id: "rule-empty-target",
+            kind: "path",
+            source: "manual",
+            targetPath: "",
+          },
+          {
+            id: "rule-whitespace-target",
+            kind: "directory",
+            source: "manual",
+            targetPath: "   ",
           },
           {
             id: "rule-invalid-preset",

@@ -117,6 +117,10 @@ function parseStoredRule(rule: unknown): ProtectionRule | null {
   }
 
   if ((kind === "path" || kind === "directory") && typeof candidate.targetPath === "string") {
+    if (candidate.targetPath.trim().length === 0) {
+      return null;
+    }
+
     return {
       id,
       kind,

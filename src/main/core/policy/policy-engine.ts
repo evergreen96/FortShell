@@ -431,6 +431,15 @@ export class PolicyEngine {
       throw (cause instanceof Error ? cause : new Error(errorMessage(cause)));
     }
 
+    let finalCleanupError: unknown = null;
+    if (this.enforcer?.isAvailable()) {
+      try {
+        await this.enforcer.cleanup();
+      } catch (err) {
+        finalCleanupError = err;
+      }
+    }
+
     this.commitPolicySnapshot(
       this.buildPolicySnapshot(previousSnapshot.projectRoot, [])
     );
@@ -441,6 +450,9 @@ export class PolicyEngine {
     }
     if (restoreError) {
       details.push(`restore failed: ${errorMessage(restoreError)}`);
+    }
+    if (finalCleanupError) {
+      details.push(`final cleanup failed: ${errorMessage(finalCleanupError)}`);
     }
 
     throw new Error(details.join("; "));
