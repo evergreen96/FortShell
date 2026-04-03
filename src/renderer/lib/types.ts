@@ -33,6 +33,7 @@ export type TerminalSessionMeta = {
   staleReason?: "policy-changed";
   launchFailureReason?: string;
   launchFailureDetail?: string;
+  launchRetryable?: boolean;
 };
 
 export type ElectronAPI = {
@@ -58,10 +59,10 @@ export type ElectronAPI = {
   onTerminalExit: (
     callback: (id: string, exitCode: number) => void
   ) => () => void;
-  terminalRestart: (id: string) => Promise<unknown>;
-  terminalRestartAllStale: () => Promise<unknown>;
-  terminalRetryProtected: (id: string) => Promise<unknown>;
-  terminalCloseFailed: (id: string) => Promise<unknown>;
+  terminalRestart: (id: string) => Promise<any>;
+  terminalRestartAllStale: () => Promise<any>;
+  terminalRetryProtected: (id: string) => Promise<any>;
+  terminalCloseFailed: (id: string) => Promise<any>;
   openFolder: () => Promise<string | null>;
   workspaceSetRoot: (dirPath: string) => Promise<string>;
   workspaceRecent: () => Promise<string[]>;

@@ -1,4 +1,10 @@
 import { contextBridge, ipcRenderer } from "electron";
+import type { TerminalSessionRuntime } from "./core/terminal/session-runtime";
+
+type TerminalSessionStatePayload = {
+  sessions: TerminalSessionRuntime[];
+  policyRevision: number;
+};
 
 contextBridge.exposeInMainWorld("electronAPI", {
   // Terminal
@@ -15,42 +21,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
   terminalDestroy: (id: string) =>
     ipcRenderer.invoke("terminal:destroy", id),
   onTerminalSessionState: (
-    callback: (payload: {
-      sessions: Array<{
-        terminalId: string;
-        displayName: string;
-        shell: string;
-        trustState: "protected" | "unprotected" | "stale-policy" | "fallback" | "launch-failed" | "exited";
-        launchMode: "sandboxed" | "plain-shell-fallback" | "launch-failed";
-        policyRevision: number;
-        startedAt: string;
-        layoutSlotKey?: string;
-        staleReason?: "policy-changed";
-        launchFailureReason?: string;
-        launchFailureDetail?: string;
-      }>;
-      policyRevision: number;
-    }) => void
+    callback: (payload: TerminalSessionStatePayload) => void
   ) => {
-    const handler = (
-      _event: Electron.IpcRendererEvent,
-      payload: {
-        sessions: Array<{
-          terminalId: string;
-          displayName: string;
-          shell: string;
-          trustState: "protected" | "unprotected" | "stale-policy" | "fallback" | "launch-failed" | "exited";
-          launchMode: "sandboxed" | "plain-shell-fallback" | "launch-failed";
-          policyRevision: number;
-          startedAt: string;
-          layoutSlotKey?: string;
-          staleReason?: "policy-changed";
-          launchFailureReason?: string;
-          launchFailureDetail?: string;
-        }>;
-        policyRevision: number;
-      }
-    ) => callback(payload);
+    const handler = (_event: Electron.IpcRendererEvent, payload: TerminalSessionStatePayload) =>
+      callback(payload);
     ipcRenderer.on("terminal:session-state", handler);
     return () => {
       ipcRenderer.removeListener("terminal:session-state", handler);
