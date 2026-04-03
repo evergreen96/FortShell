@@ -23,6 +23,25 @@ describe("session runtime trust model", () => {
     expect(stale.staleReason).toBe("policy-changed");
   });
 
+  it("does not mark exited sessions stale when policy revision changes", () => {
+    const runtime = {
+      ...createSessionRuntime({
+        terminalId: "term-1b",
+        displayName: "zsh (term-1b)",
+        shell: "zsh",
+        policyRevision: 2,
+        launchMode: "sandboxed",
+      }),
+      trustState: "exited" as const,
+    };
+
+    const updated = markPolicyRevisionChanged(runtime, 3);
+
+    expect(updated).toBe(runtime);
+    expect(updated.trustState).toBe("exited");
+    expect(updated.staleReason).toBeUndefined();
+  });
+
   it("keeps fallback sessions out of stale bulk restart targeting", () => {
     const runtime = markLaunchFallback(
       createSessionRuntime({

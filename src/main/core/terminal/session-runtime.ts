@@ -31,7 +31,7 @@ export function createSessionRuntime(input: {
   displayName: string;
   shell: string;
   policyRevision: number;
-  launchMode: SessionLaunchMode;
+  launchMode: "sandboxed";
   layoutSlotKey?: string;
 }): TerminalSessionRuntime {
   return {
@@ -39,7 +39,7 @@ export function createSessionRuntime(input: {
     displayName: input.displayName,
     shell: input.shell,
     launchMode: input.launchMode,
-    trustState: input.launchMode === "sandboxed" ? "protected" : "unprotected",
+    trustState: "protected",
     policyRevision: input.policyRevision,
     startedAt: new Date().toISOString(),
     layoutSlotKey: input.layoutSlotKey,
@@ -50,7 +50,11 @@ export function markPolicyRevisionChanged(
   runtime: TerminalSessionRuntime,
   nextPolicyRevision: number
 ): TerminalSessionRuntime {
-  if (runtime.launchMode !== "sandboxed" || runtime.policyRevision === nextPolicyRevision) {
+  if (
+    runtime.trustState === "exited" ||
+    runtime.launchMode !== "sandboxed" ||
+    runtime.policyRevision === nextPolicyRevision
+  ) {
     return runtime;
   }
 
