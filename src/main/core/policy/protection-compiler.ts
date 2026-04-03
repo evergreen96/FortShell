@@ -137,7 +137,7 @@ function compileRuleEntries(
       if (matches) {
         matched.push({
           ...entry,
-          type: entry.isDirectory ? "directory" : "file",
+          type: entry.isDirectory ? "folder" : "file",
           status: "shielded",
           canRemoveDirectly: rule.source === "manual",
           sourceRuleId: rule.id,

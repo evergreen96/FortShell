@@ -13,7 +13,7 @@ export type WorkspaceSearchResult = {
   isDirectory: boolean;
 };
 
-export type ProtectionCompiledEntryType = "file" | "directory";
+export type ProtectionCompiledEntryType = "file" | "folder";
 
 export type ProtectionCompiledEntryStatus = "shielded";
 

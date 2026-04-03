@@ -277,16 +277,23 @@ export class PolicyEngine {
   }
 
   async addPathRule(filePath: string): Promise<{ changed: boolean; reason?: string }> {
-    const normalized = resolveRealPath(filePath);
-    if (this.isProtected(normalized)) {
+    const normalized = this.projectRoot
+      ? resolveWorkspaceTargetPath(this.projectRoot, filePath)
+      : resolveRealPath(filePath);
+    if (this.projectRoot && !normalized) {
+      return { changed: false, reason: "outside-workspace" };
+    }
+
+    const targetPath = normalized ?? resolveRealPath(filePath);
+    if (this.isProtected(targetPath)) {
       return { changed: false, reason: "already-protected" };
     }
 
     const nextRule: ProtectionRule = {
       id: crypto.randomUUID(),
-      kind: isDirectoryPath(normalized) ? "directory" : "path",
+      kind: isDirectoryPath(targetPath) ? "directory" : "path",
       source: "manual",
-      targetPath: toStoredTargetPath(this.projectRoot, normalized),
+      targetPath: toStoredTargetPath(this.projectRoot, targetPath),
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -536,23 +543,51 @@ export class PolicyEngine {
   }
 
   private async rollbackToSnapshot(snapshot: PolicySnapshot): Promise<void> {
-    this.commitPolicySnapshot(snapshot);
-
     if (!this.enforcer?.isAvailable()) {
+      this.commitPolicySnapshot(snapshot);
       return;
     }
 
+    let cleanupError: unknown = null;
     try {
       await this.enforcer.cleanup();
     } catch (err) {
-      console.warn(`[policy] Failed to cleanup enforcer during rollback:`, err);
+      cleanupError = err;
     }
 
-    try {
-      await this.replayEnforcerTargets(snapshot.enforcerTargets);
-    } catch (err) {
-      console.warn(`[policy] Failed to replay enforcer targets during rollback:`, err);
+    let replayError: unknown = null;
+    if (!cleanupError) {
+      try {
+        await this.replayEnforcerTargets(snapshot.enforcerTargets);
+      } catch (err) {
+        replayError = err;
+      }
     }
+
+    if (!cleanupError && !replayError) {
+      this.commitPolicySnapshot(snapshot);
+      return;
+    }
+
+    let finalCleanupError: unknown = null;
+    try {
+      await this.enforcer.cleanup();
+    } catch (err) {
+      finalCleanupError = err;
+    }
+
+    const details = [`rollback failed after restore attempt: ${errorMessage(cleanupError ?? replayError)}`];
+    if (cleanupError) {
+      details.push(`cleanup failed: ${errorMessage(cleanupError)}`);
+    }
+    if (replayError) {
+      details.push(`restore failed: ${errorMessage(replayError)}`);
+    }
+    if (finalCleanupError) {
+      details.push(`final cleanup failed: ${errorMessage(finalCleanupError)}`);
+    }
+
+    throw new Error(details.join("; "));
   }
 
   private async replaceRules(
@@ -767,10 +802,6 @@ export class PolicyEngine {
         finalCleanupError = err;
       }
     }
-
-    this.commitPolicySnapshot(
-      this.buildPolicySnapshot(previousSnapshot.projectRoot, [])
-    );
 
     const details = [`replay failed: ${errorMessage(cause)}`];
     if (cleanupError) {

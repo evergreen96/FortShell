@@ -64,7 +64,7 @@ export type WorkspaceProtectionEntry = {
 };
 
 export type CompiledProtectionEntry = WorkspaceProtectionEntry & {
-  type: "file" | "directory";
+  type: "file" | "folder";
   status: "shielded";
   canRemoveDirectly: boolean;
   sourceRuleId: string;
@@ -158,12 +158,20 @@ export function getProtectionRuleSourceLabel(
   }
 
   if (rule.kind === "extension") {
-    return "Extension Rule";
+    const normalizedExtensions = Array.from(
+      new Set(rule.extensions.map((extension) => extension.trim().toLowerCase()))
+    )
+      .map((extension) => (extension.startsWith(".") ? extension : `.${extension}`))
+      .sort();
+
+    return normalizedExtensions.length > 0
+      ? `${normalizedExtensions.join(", ")} Rule`
+      : "Extension Rule";
   }
 
   if (rule.kind === "directory") {
-    return "Directory Rule";
+    return rule.source === "import" ? "Imported Folder" : "Manual Folder";
   }
 
-  return "Manual Rule";
+  return rule.source === "import" ? "Imported Path" : "Manual Path";
 }

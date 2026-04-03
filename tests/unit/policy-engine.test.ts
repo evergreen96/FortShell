@@ -258,7 +258,7 @@ describe("PolicyEngine", () => {
     }
   });
 
-  it("cleans up partial restore protections when restoring the previous snapshot also fails", async () => {
+  it("retains the previous snapshot when rollback replay fails", async () => {
     const previousAPath = path.join(tmpDir, "previous-a.txt");
     const previousBPath = path.join(tmpDir, "previous-b.txt");
     fs.writeFileSync(previousAPath, "a");
@@ -341,13 +341,16 @@ describe("PolicyEngine", () => {
 
       await expect(engine.setProjectRoot(nextDir)).rejects.toThrow("restore failed");
       expect(cleanupCalls).toBeGreaterThanOrEqual(2);
-      expect(appliedPaths.size).toBe(0);
-      expect(engine.list()).toEqual([]);
-      expect(engine.listRules()).toEqual([]);
-      expect(engine.isProtected(previousAPath)).toBe(false);
-      expect(engine.isProtected(previousBPath)).toBe(false);
+      expect(engine.list()).toEqual([
+        fs.realpathSync(previousAPath),
+        fs.realpathSync(previousBPath),
+      ]);
+      expect(engine.listRules()).toHaveLength(2);
+      expect(engine.isProtected(previousAPath)).toBe(true);
+      expect(engine.isProtected(previousBPath)).toBe(true);
       expect(engine.isProtected(nextEnvPath)).toBe(false);
       expect(engine.isProtected(nextSecretPath)).toBe(false);
+      expect(engine.getPolicyRevision()).toBe(2);
     } finally {
       fs.rmSync(nextDir, { recursive: true, force: true });
     }
@@ -380,6 +383,22 @@ describe("PolicyEngine", () => {
     expect(engine.isProtected(filePath)).toBe(false);
     expect(engine.listRules()).toEqual([]);
     expect(await engine.removeRule(rules[0].id)).toBe(false);
+  });
+
+  it("rejects manual path rules outside the current workspace", async () => {
+    await engine.setProjectRoot(tmpDir);
+
+    const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), "ai-ide-outside-manual-"));
+    const outsideFile = path.join(outsideDir, "manual.txt");
+    fs.writeFileSync(outsideFile, "manual");
+
+    expect(await engine.addPathRule(outsideFile)).toEqual({
+      changed: false,
+      reason: "outside-workspace",
+    });
+    expect(await engine.protect(outsideFile)).toBe(false);
+    expect(engine.listRules()).toEqual([]);
+    expect(engine.listCompiledEntries()).toEqual([]);
   });
 
   it("applies preset, extension, and directory rules through the rule APIs", async () => {
@@ -427,6 +446,45 @@ describe("PolicyEngine", () => {
         }),
       ]),
       updatedAt: expect.any(String),
+    });
+  });
+
+  it("labels compiled protections with source-specific labels and folder types", async () => {
+    await engine.setProjectRoot(tmpDir);
+
+    const envPath = path.join(tmpDir, ".env");
+    const certPath = path.join(tmpDir, "cert.pem");
+    const secretsDir = path.join(tmpDir, "secrets");
+    const secretFile = path.join(secretsDir, "db.txt");
+    fs.writeFileSync(envPath, "env");
+    fs.writeFileSync(certPath, "pem");
+    fs.mkdirSync(secretsDir);
+    fs.writeFileSync(secretFile, "secret");
+
+    expect(await engine.applyPreset("env-files")).toEqual({ changed: true });
+    expect(await engine.addExtensionRule([".pem"])).toEqual({ changed: true });
+    expect(await engine.addDirectoryRule(secretsDir)).toEqual({ changed: true });
+
+    const compiled = engine.listCompiledEntries();
+    expect(compiled.find((entry) => entry.relativePath === ".env")).toMatchObject({
+      type: "file",
+      sourceLabel: "Env Files Preset",
+    });
+    expect(
+      compiled.find((entry) => entry.relativePath === "cert.pem")
+    ).toMatchObject({
+      type: "file",
+      sourceLabel: ".pem Rule",
+    });
+    expect(compiled.find((entry) => entry.relativePath === "secrets")).toMatchObject({
+      type: "folder",
+      sourceLabel: "Manual Folder",
+    });
+    expect(
+      compiled.find((entry) => entry.relativePath === "secrets/db.txt")
+    ).toMatchObject({
+      type: "file",
+      sourceLabel: "Manual Folder",
     });
   });
 
@@ -640,6 +698,84 @@ describe("PolicyEngine", () => {
     expect(engine.isProtected(originalPath)).toBe(true);
     expect(engine.isProtected(replacementPath)).toBe(false);
     expect(appliedPaths).toEqual(new Set([fs.realpathSync(originalPath)]));
+  });
+
+  it("retains the previous snapshot when replaceRules rollback replay fails", async () => {
+    await engine.setProjectRoot(tmpDir);
+
+    const previousAPath = path.join(tmpDir, "previous-a.txt");
+    const previousBPath = path.join(tmpDir, "previous-b.txt");
+    const nextPath = path.join(tmpDir, "next.txt");
+    fs.writeFileSync(previousAPath, "a");
+    fs.writeFileSync(previousBPath, "b");
+    fs.writeFileSync(nextPath, "next");
+
+    const appliedPaths = new Set<string>();
+    let previousReplayAttempts = 0;
+    let rollbackStarted = false;
+    const fakeEnforcer: PolicyEnforcer = {
+      applyProtection: async (targetPath) => {
+        if (rollbackStarted) {
+          previousReplayAttempts += 1;
+          if (previousReplayAttempts === 2) {
+            throw new Error("rollback replay failed");
+          }
+        }
+
+        appliedPaths.add(targetPath);
+      },
+      removeProtection: async (targetPath) => {
+        if (targetPath === fs.realpathSync(previousBPath)) {
+          rollbackStarted = true;
+          throw new Error("remove failed");
+        }
+        appliedPaths.delete(targetPath);
+      },
+      isAvailable: () => true,
+      cleanup: async () => {
+        appliedPaths.clear();
+      },
+    };
+    engine.setEnforcer(fakeEnforcer);
+
+    await engine.protect(previousAPath);
+    await engine.protect(previousBPath);
+
+    await expect(
+      engine.importWorkspacePolicy({
+        version: 3,
+        workspaceRoot: fs.realpathSync(tmpDir),
+        rules: [
+          {
+            id: "rule-previous-a",
+            kind: "path",
+            source: "import",
+            targetPath: "previous-a.txt",
+            createdAt: "2026-04-03T00:00:00.000Z",
+            updatedAt: "2026-04-03T00:00:00.000Z",
+          },
+          {
+            id: "rule-next",
+            kind: "path",
+            source: "import",
+            targetPath: "next.txt",
+            createdAt: "2026-04-03T00:00:00.000Z",
+            updatedAt: "2026-04-03T00:00:00.000Z",
+          },
+        ],
+        updatedAt: "2026-04-03T00:00:00.000Z",
+      })
+    ).rejects.toThrow("rollback replay failed");
+
+    expect(engine.list()).toEqual([
+      fs.realpathSync(previousAPath),
+      fs.realpathSync(previousBPath),
+    ]);
+    expect(engine.listRules()).toHaveLength(2);
+    expect(engine.isProtected(previousAPath)).toBe(true);
+    expect(engine.isProtected(previousBPath)).toBe(true);
+    expect(engine.isProtected(nextPath)).toBe(false);
+    expect(engine.getPolicyRevision()).toBe(2);
   });
 
   it("restores the previous enforcer state when dynamic recompilation fails mid-diff", async () => {
