@@ -587,6 +587,9 @@ export class PolicyEngine {
       details.push(`final cleanup failed: ${errorMessage(finalCleanupError)}`);
     }
 
+    this.commitPolicySnapshot(
+      this.buildPolicySnapshot(snapshot.projectRoot, [])
+    );
     throw new Error(details.join("; "));
   }
 

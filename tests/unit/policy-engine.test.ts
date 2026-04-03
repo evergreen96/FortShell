@@ -700,7 +700,7 @@ describe("PolicyEngine", () => {
     expect(appliedPaths).toEqual(new Set([fs.realpathSync(originalPath)]));
   });
 
-  it("retains the previous snapshot when replaceRules rollback replay fails", async () => {
+  it("falls back to an empty snapshot when replaceRules rollback replay fails", async () => {
     await engine.setProjectRoot(tmpDir);
 
     const previousAPath = path.join(tmpDir, "previous-a.txt");
@@ -767,14 +767,12 @@ describe("PolicyEngine", () => {
       })
     ).rejects.toThrow("rollback replay failed");
 
-    expect(engine.list()).toEqual([
-      fs.realpathSync(previousAPath),
-      fs.realpathSync(previousBPath),
-    ]);
-    expect(engine.listRules()).toHaveLength(2);
-    expect(engine.isProtected(previousAPath)).toBe(true);
-    expect(engine.isProtected(previousBPath)).toBe(true);
+    expect(engine.list()).toEqual([]);
+    expect(engine.listRules()).toEqual([]);
+    expect(engine.isProtected(previousAPath)).toBe(false);
+    expect(engine.isProtected(previousBPath)).toBe(false);
     expect(engine.isProtected(nextPath)).toBe(false);
+    expect(appliedPaths).toEqual(new Set<string>());
     expect(engine.getPolicyRevision()).toBe(2);
   });
 
