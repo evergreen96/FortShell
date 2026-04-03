@@ -72,6 +72,11 @@ test.describe("Terminal Integration", () => {
         hasTerminalWrite: typeof api.terminalWrite === "function",
         hasTerminalResize: typeof api.terminalResize === "function",
         hasTerminalDestroy: typeof api.terminalDestroy === "function",
+        hasOnTerminalSessionState: typeof api.onTerminalSessionState === "function",
+        hasTerminalRestart: typeof api.terminalRestart === "function",
+        hasTerminalRestartAllStale: typeof api.terminalRestartAllStale === "function",
+        hasTerminalRetryProtected: typeof api.terminalRetryProtected === "function",
+        hasTerminalCloseFailed: typeof api.terminalCloseFailed === "function",
         hasPolicySet: typeof api.policySet === "function",
         hasPolicyRemove: typeof api.policyRemove === "function",
         hasPolicyList: typeof api.policyList === "function",
@@ -85,6 +90,11 @@ test.describe("Terminal Integration", () => {
     expect(methods.hasTerminalWrite).toBe(true);
     expect(methods.hasTerminalResize).toBe(true);
     expect(methods.hasTerminalDestroy).toBe(true);
+    expect(methods.hasOnTerminalSessionState).toBe(true);
+    expect(methods.hasTerminalRestart).toBe(true);
+    expect(methods.hasTerminalRestartAllStale).toBe(true);
+    expect(methods.hasTerminalRetryProtected).toBe(true);
+    expect(methods.hasTerminalCloseFailed).toBe(true);
     expect(methods.hasPolicySet).toBe(true);
     expect(methods.hasPolicyRemove).toBe(true);
     expect(methods.hasPolicyList).toBe(true);

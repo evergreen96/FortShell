@@ -13,6 +13,28 @@ export type WorkspaceSearchResult = {
   isDirectory: boolean;
 };
 
+export type TerminalTrustState =
+  | "protected"
+  | "unprotected"
+  | "stale-policy"
+  | "fallback"
+  | "launch-failed"
+  | "exited";
+
+export type TerminalSessionMeta = {
+  terminalId: string;
+  displayName: string;
+  shell: string;
+  trustState: TerminalTrustState;
+  launchMode: "sandboxed" | "plain-shell-fallback" | "launch-failed";
+  policyRevision: number;
+  startedAt: string;
+  layoutSlotKey?: string;
+  staleReason?: "policy-changed";
+  launchFailureReason?: string;
+  launchFailureDetail?: string;
+};
+
 export type ElectronAPI = {
   terminalCreate: (opts: {
     shell?: string;
@@ -24,12 +46,22 @@ export type ElectronAPI = {
   terminalResize: (id: string, cols: number, rows: number) => void;
   terminalDestroy: (id: string) => Promise<boolean>;
   terminalProfiles: () => Promise<ShellProfile[]>;
+  onTerminalSessionState: (
+    callback: (payload: {
+      sessions: TerminalSessionMeta[];
+      policyRevision: number;
+    }) => void
+  ) => () => void;
   onTerminalData: (
     callback: (id: string, data: string) => void
   ) => () => void;
   onTerminalExit: (
     callback: (id: string, exitCode: number) => void
   ) => () => void;
+  terminalRestart: (id: string) => Promise<unknown>;
+  terminalRestartAllStale: () => Promise<unknown>;
+  terminalRetryProtected: (id: string) => Promise<unknown>;
+  terminalCloseFailed: (id: string) => Promise<unknown>;
   openFolder: () => Promise<string | null>;
   workspaceSetRoot: (dirPath: string) => Promise<string>;
   workspaceRecent: () => Promise<string[]>;
