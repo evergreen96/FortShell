@@ -7,8 +7,7 @@ type LaunchedApp = {
   app: ElectronApplication;
   page: Page;
   workspaceDir: string;
-  recentWorkspacesPath: string;
-  recentWorkspacesBackup: string | null;
+  userDataDir: string;
 };
 
 type SessionRuntime = {
@@ -67,21 +66,8 @@ async function installRendererHarness(page: Page): Promise<void> {
 }
 
 async function launchAppForWorkspace(workspaceDir: string): Promise<LaunchedApp> {
-  const bootstrapApp = await electron.launch({
-    args: [path.join(process.cwd(), "dist-main/index.js")],
-    env: {
-      ...process.env,
-      NODE_ENV: "test",
-    },
-  });
-  const userDataDir = await bootstrapApp.evaluate(({ app }) => app.getPath("userData"));
-  await bootstrapApp.close();
-
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "fortshell-e2e-user-data-"));
   const recentWorkspacesPath = path.join(userDataDir, "recent-workspaces.json");
-  const recentWorkspacesBackup = fs.existsSync(recentWorkspacesPath)
-    ? fs.readFileSync(recentWorkspacesPath, "utf-8")
-    : null;
-
   fs.mkdirSync(userDataDir, { recursive: true });
   fs.writeFileSync(
     recentWorkspacesPath,
@@ -94,6 +80,7 @@ async function launchAppForWorkspace(workspaceDir: string): Promise<LaunchedApp>
     env: {
       ...process.env,
       NODE_ENV: "test",
+      FORTSHELL_USER_DATA_DIR: userDataDir,
     },
   });
 
@@ -107,24 +94,14 @@ async function launchAppForWorkspace(workspaceDir: string): Promise<LaunchedApp>
     app,
     page,
     workspaceDir,
-    recentWorkspacesPath,
-    recentWorkspacesBackup,
+    userDataDir,
   };
 }
 
 async function cleanupLaunchedApp(launchedApp: LaunchedApp): Promise<void> {
   await launchedApp.app.close();
   fs.rmSync(launchedApp.workspaceDir, { recursive: true, force: true });
-  if (launchedApp.recentWorkspacesBackup === null) {
-    fs.rmSync(launchedApp.recentWorkspacesPath, { force: true });
-    return;
-  }
-
-  fs.writeFileSync(
-    launchedApp.recentWorkspacesPath,
-    launchedApp.recentWorkspacesBackup,
-    "utf-8"
-  );
+  fs.rmSync(launchedApp.userDataDir, { recursive: true, force: true });
 }
 
 async function getSessions(page: Page): Promise<SessionRuntime[]> {
@@ -347,8 +324,11 @@ test.describe("Lock Integrity", () => {
     const workspaceDir = fs.mkdtempSync(path.join(os.tmpdir(), "fortshell-manual-lock-"));
     const targetPath = path.join(workspaceDir, "manual.txt");
     const renamedPath = path.join(workspaceDir, "manual-renamed.txt");
+    const publicPath = path.join(workspaceDir, "public.txt");
     const secretContent = "MANUAL_SECRET";
+    const publicContent = "MANUAL_PUBLIC";
     fs.writeFileSync(targetPath, secretContent);
+    fs.writeFileSync(publicPath, publicContent);
 
     const launched = await launchAppForWorkspace(workspaceDir);
     try {
@@ -375,6 +355,11 @@ test.describe("Lock Integrity", () => {
       expectBlocked(await runCatFile(launched.page, terminalId, targetPath), secretContent);
       expectBlocked(await runWriteFile(launched.page, terminalId, targetPath, "MUTATED_SECRET"), "MUTATED_SECRET");
       expectBlocked(await runMoveFile(launched.page, secondaryTerminalId, targetPath, renamedPath), secretContent);
+      expectAllowed(await runCatFile(launched.page, secondaryTerminalId, publicPath), publicContent);
+      expectCommandSucceeded(
+        await runWriteFile(launched.page, secondaryTerminalId, publicPath, "PUBLIC_MUTATED")
+      );
+      expect(fs.readFileSync(publicPath, "utf-8")).toBe("PUBLIC_MUTATED");
 
       await launched.page.evaluate(async (filePath) => {
         await window.electronAPI.policyRemove(filePath);
@@ -447,7 +432,9 @@ test.describe("Lock Integrity", () => {
     const workspaceDir = fs.mkdtempSync(path.join(os.tmpdir(), "fortshell-preset-lock-"));
     const envPath = path.join(workspaceDir, ".env");
     const envLocalPath = path.join(workspaceDir, ".env.local");
+    const notesPath = path.join(workspaceDir, "notes.txt");
     const secretContent = "PRESET_SECRET";
+    fs.writeFileSync(notesPath, "PRESET_PUBLIC");
 
     const launched = await launchAppForWorkspace(workspaceDir);
     try {
@@ -467,6 +454,9 @@ test.describe("Lock Integrity", () => {
       terminalId = await restartTerminal(launched.page, terminalId);
       expectBlocked(await runCatFile(launched.page, terminalId, envPath), secretContent);
       expectBlocked(await runWriteFile(launched.page, terminalId, envPath, "PRESET_MUTATED"), "PRESET_MUTATED");
+      expectAllowed(await runCatFile(launched.page, terminalId, notesPath), "PRESET_PUBLIC");
+      expectCommandSucceeded(await runWriteFile(launched.page, terminalId, notesPath, "PRESET_PUBLIC_MUTATED"));
+      expect(fs.readFileSync(notesPath, "utf-8")).toBe("PRESET_PUBLIC_MUTATED");
 
       fs.rmSync(envPath, { force: true });
       await waitForSessionTrustState(launched.page, terminalId, "stale-policy");
@@ -517,7 +507,9 @@ test.describe("Lock Integrity", () => {
     const workspaceDir = fs.mkdtempSync(path.join(os.tmpdir(), "fortshell-extension-lock-"));
     const sourcePath = path.join(workspaceDir, ".env.local");
     const renamedPath = path.join(workspaceDir, "notes.txt");
+    const publicPath = path.join(workspaceDir, "public.txt");
     const secretContent = "EXTENSION_SECRET";
+    fs.writeFileSync(publicPath, "EXTENSION_PUBLIC");
 
     const launched = await launchAppForWorkspace(workspaceDir);
     try {
@@ -537,6 +529,11 @@ test.describe("Lock Integrity", () => {
       terminalId = await restartTerminal(launched.page, terminalId);
       expectBlocked(await runCatFile(launched.page, terminalId, sourcePath), secretContent);
       expectBlocked(await runWriteFile(launched.page, terminalId, sourcePath, "EXTENSION_MUTATED"), "EXTENSION_MUTATED");
+      expectAllowed(await runCatFile(launched.page, terminalId, publicPath), "EXTENSION_PUBLIC");
+      expectCommandSucceeded(
+        await runWriteFile(launched.page, terminalId, publicPath, "EXTENSION_PUBLIC_MUTATED")
+      );
+      expect(fs.readFileSync(publicPath, "utf-8")).toBe("EXTENSION_PUBLIC_MUTATED");
 
       fs.rmSync(sourcePath, { force: true });
       await waitForSessionTrustState(launched.page, terminalId, "stale-policy");
@@ -590,7 +587,9 @@ test.describe("Lock Integrity", () => {
     const existingSecretPath = path.join(secretsDir, "db.txt");
     const newSecretPath = path.join(secretsDir, "fresh.txt");
     const movedPath = path.join(publicDir, "db.txt");
+    const publicPath = path.join(publicDir, "notes.txt");
     fs.writeFileSync(existingSecretPath, "DIRECTORY_SECRET");
+    fs.writeFileSync(publicPath, "DIRECTORY_PUBLIC");
 
     const launched = await launchAppForWorkspace(workspaceDir);
     try {
@@ -610,6 +609,11 @@ test.describe("Lock Integrity", () => {
       terminalId = await restartTerminal(launched.page, terminalId);
       expectBlocked(await runCatFile(launched.page, terminalId, existingSecretPath), "DIRECTORY_SECRET");
       expectBlocked(await runWriteFile(launched.page, terminalId, existingSecretPath, "DIR_MUTATED"), "DIR_MUTATED");
+      expectAllowed(await runCatFile(launched.page, terminalId, publicPath), "DIRECTORY_PUBLIC");
+      expectCommandSucceeded(
+        await runWriteFile(launched.page, terminalId, publicPath, "DIRECTORY_PUBLIC_MUTATED")
+      );
+      expect(fs.readFileSync(publicPath, "utf-8")).toBe("DIRECTORY_PUBLIC_MUTATED");
 
       fs.writeFileSync(newSecretPath, "NEW_DIRECTORY_SECRET");
       await waitForSessionTrustState(launched.page, terminalId, "stale-policy");
@@ -649,6 +653,46 @@ test.describe("Lock Integrity", () => {
 
       terminalId = await restartTerminal(launched.page, terminalId);
       expectAllowed(await runCatFile(launched.page, terminalId, newSecretPath), "NEW_DIRECTORY_SECRET");
+    } finally {
+      await cleanupLaunchedApp(launched);
+    }
+  });
+
+  test("manual path rules block symlink traversal from the FortShell terminal", async () => {
+    const workspaceDir = fs.mkdtempSync(path.join(os.tmpdir(), "fortshell-symlink-lock-"));
+    const targetPath = path.join(workspaceDir, "secret.txt");
+    const symlinkPath = path.join(workspaceDir, "link.txt");
+    const secretContent = "SYMLINK_SECRET";
+    fs.writeFileSync(targetPath, secretContent);
+    fs.symlinkSync(targetPath, symlinkPath);
+
+    const launched = await launchAppForWorkspace(workspaceDir);
+    try {
+      await waitForFirstSession(launched.page);
+      let terminalId = await createDedicatedTerminal(launched.page, workspaceDir);
+
+      expectAllowed(await runCatFile(launched.page, terminalId, symlinkPath), secretContent);
+
+      await launched.page.evaluate(async (filePath) => {
+        await window.electronAPI.policySet(filePath);
+      }, targetPath);
+
+      await waitForSessionTrustState(launched.page, terminalId, "stale-policy");
+      await waitForCompiledPath(launched.page, "secret.txt", true);
+      await waitForProtectionPath(launched.page, "secret.txt", true);
+
+      terminalId = await restartTerminal(launched.page, terminalId);
+      expectBlocked(await runCatFile(launched.page, terminalId, symlinkPath), secretContent);
+
+      await launched.page.evaluate(async (filePath) => {
+        await window.electronAPI.policyRemove(filePath);
+      }, targetPath);
+
+      await waitForCompiledPath(launched.page, "secret.txt", false);
+      await waitForProtectionPath(launched.page, "secret.txt", false);
+
+      terminalId = await restartTerminal(launched.page, terminalId);
+      expectAllowed(await runCatFile(launched.page, terminalId, symlinkPath), secretContent);
     } finally {
       await cleanupLaunchedApp(launched);
     }

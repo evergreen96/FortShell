@@ -5,13 +5,16 @@ import os from "os";
 
 let app: ElectronApplication;
 let page: Page;
+let userDataDir: string;
 
 test.beforeAll(async () => {
+  userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "fortshell-app-user-data-"));
   app = await electron.launch({
     args: [path.join(__dirname, "../../dist-main/index.js")],
     env: {
       ...process.env,
       NODE_ENV: "test",
+      FORTSHELL_USER_DATA_DIR: userDataDir,
     },
   });
   page = await app.firstWindow();
@@ -21,6 +24,7 @@ test.beforeAll(async () => {
 
 test.afterAll(async () => {
   if (app) await app.close();
+  if (userDataDir) fs.rmSync(userDataDir, { recursive: true, force: true });
 });
 
 test.describe("App Launch", () => {

@@ -6,10 +6,12 @@ import os from "os";
 let app: ElectronApplication;
 let page: Page;
 let tmpDir: string;
+let userDataDir: string;
 
 test.beforeAll(async () => {
   // Create test workspace
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ai-ide-term-e2e-"));
+  userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "fortshell-user-data-"));
   fs.writeFileSync(path.join(tmpDir, "public.txt"), "PUBLIC CONTENT");
   fs.writeFileSync(path.join(tmpDir, "secret.txt"), "SECRET CONTENT");
 
@@ -18,6 +20,7 @@ test.beforeAll(async () => {
     env: {
       ...process.env,
       NODE_ENV: "test",
+      FORTSHELL_USER_DATA_DIR: userDataDir,
     },
   });
   page = await app.firstWindow();
@@ -27,9 +30,30 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
   if (app) await app.close();
   if (tmpDir) fs.rmSync(tmpDir, { recursive: true, force: true });
+  if (userDataDir) fs.rmSync(userDataDir, { recursive: true, force: true });
 });
 
 test.describe("Terminal Integration", () => {
+  test("should honor a test-specific userData override", async () => {
+    const isolatedUserDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "fortshell-user-data-"));
+    const isolatedApp = await electron.launch({
+      args: [path.join(__dirname, "../../dist-main/index.js")],
+      env: {
+        ...process.env,
+        NODE_ENV: "test",
+        FORTSHELL_USER_DATA_DIR: isolatedUserDataDir,
+      },
+    });
+
+    try {
+      const effectiveUserData = await isolatedApp.evaluate(({ app }) => app.getPath("userData"));
+      expect(effectiveUserData).toBe(isolatedUserDataDir);
+    } finally {
+      await isolatedApp.close();
+      fs.rmSync(isolatedUserDataDir, { recursive: true, force: true });
+    }
+  });
+
   test("should have terminal IPC handlers registered", async () => {
     // Verify terminal creation works via renderer's electronAPI
     const hasAPI = await page.evaluate(() => {

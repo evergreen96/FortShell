@@ -6,6 +6,10 @@ import { FileWatcher } from "./core/workspace/file-watcher";
 import { registerIpcHandlers } from "./core/ipc/handlers";
 import { createPolicyEnforcer } from "./platform/index";
 
+if (process.env.FORTSHELL_USER_DATA_DIR) {
+  app.setPath("userData", path.resolve(process.env.FORTSHELL_USER_DATA_DIR));
+}
+
 const ptyManager = new PtyManager();
 const policyEngine = new PolicyEngine();
 const fileWatcher = new FileWatcher();
