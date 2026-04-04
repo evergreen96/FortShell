@@ -1,6 +1,6 @@
 # FortShell
 
-A terminal-first IDE for managing multiple AI CLI tools (Claude Code, Codex CLI, Gemini CLI, etc.) with **kernel-level file protection**.
+A terminal-first protected workspace for running AI CLI coding agents (Claude Code, Codex CLI, Gemini CLI, etc.) with **kernel-level file protection**.
 
 Protect sensitive files from AI agents — they can see the files exist, but can't read or write them. Enforced by the macOS kernel, not by the app. No admin privileges required.
 
@@ -20,7 +20,7 @@ When you use AI coding assistants in a terminal, they can read and modify any fi
 
 1. Open your project folder
 2. Right-click sensitive files (credentials, .env, proprietary code) → **Protect**
-3. Open AI CLI terminals — they run inside a macOS sandbox
+3. Start AI CLI sessions — they run inside a macOS sandbox
 4. Protected files return `Operation not permitted` — the AI adapts and works around them
 
 ```
@@ -36,6 +36,7 @@ PermissionError: [Errno 1] Operation not permitted: '.env'
 ### Terminal Management
 - **Multi-terminal tabs** — run multiple AI CLIs side by side
 - **Split layouts** — horizontal, vertical, 2-column grid
+- **Session trust state** — protected, unprotected, stale, fallback, and launch-failed states are surfaced in the UI
 - **Shell profiles** — auto-detects zsh, bash, fish + add custom shells (node, python3, etc.)
 - **xterm.js** rendering with full color, resize, and interactive program support
 
@@ -44,7 +45,7 @@ PermissionError: [Errno 1] Operation not permitted: '.env'
 - **Per-file or per-folder** — protect individual files or entire directories
 - **User-local policy storage** — protection rules live in FortShell app data, not in your repo
 - **Transparent to the user** — protected files show a lock icon in the file tree
-- **Protection Center** — review active protections, batch-protect by extension, and add new protected paths from a dedicated dashboard
+- **Protection Center** — apply built-in policy packs, add extension rules, add direct path rules, and inspect the compiled concrete paths currently shielded
 - **Cannot be bypassed** by the sandboxed process — not even with python, node, or symlinks
 
 | Access method | Blocked? |
@@ -136,8 +137,9 @@ $ python3 -c "open('.env').read()"
 PermissionError: [Errno 1] Operation not permitted: '.env'
 ```
 
-5. Open **Protection** from the left rail to review, batch-add, or remove protected paths
-6. To remove protection from Explorer: right-click → **Remove Protection**
+5. Open **Protection** from the left rail to apply presets, add extension rules, or inspect the compiled active list
+6. Direct rules can be removed from Explorer with **Remove Protection**
+7. Rule-generated protections show **View Protection** in Explorer and should be managed from **Protection**
 
 ### Settings
 
