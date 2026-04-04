@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { getFileTreeIconVariant } from "../../src/renderer/components/FileTree/FileTree";
+import {
+  getFileTreeIconVariant,
+  getFileTreeRelativePath,
+} from "../../src/renderer/components/FileTree/FileTree";
 
 describe("getFileTreeIconVariant", () => {
   it("uses one folder variant for directories regardless of open state", () => {
@@ -18,5 +21,14 @@ describe("getFileTreeIconVariant", () => {
     expect(
       getFileTreeIconVariant({ isDirectory: false, expanded: false, loading: false })
     ).toBe("file");
+  });
+
+  it("derives stable relative paths for nested entries", () => {
+    expect(
+      getFileTreeRelativePath("/repo", "/repo/.env.local")
+    ).toBe(".env.local");
+    expect(
+      getFileTreeRelativePath("/repo", "/repo/secrets/db.txt")
+    ).toBe("secrets/db.txt");
   });
 });

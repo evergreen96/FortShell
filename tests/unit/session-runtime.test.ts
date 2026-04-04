@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   createSessionRuntime,
+  createUnprotectedSessionRuntime,
   markPolicyRevisionChanged,
   markLaunchFallback,
   markLaunchFailed,
@@ -57,6 +58,32 @@ describe("session runtime trust model", () => {
 
     expect(runtime.trustState).toBe("fallback");
     expect(runtime.launchMode).toBe("plain-shell-fallback");
+  });
+
+  it("tracks plain shell sessions without active protections as unprotected", () => {
+    const runtime = createUnprotectedSessionRuntime({
+      terminalId: "term-plain",
+      displayName: "zsh (term-plain)",
+      shell: "zsh",
+      policyRevision: 0,
+    });
+
+    expect(runtime.trustState).toBe("unprotected");
+    expect(runtime.launchMode).toBe("plain-shell");
+  });
+
+  it("marks unprotected sessions stale when policy revision changes", () => {
+    const runtime = createUnprotectedSessionRuntime({
+      terminalId: "term-plain-2",
+      displayName: "zsh (term-plain-2)",
+      shell: "zsh",
+      policyRevision: 0,
+    });
+
+    const stale = markPolicyRevisionChanged(runtime, 1);
+
+    expect(stale.trustState).toBe("stale-policy");
+    expect(stale.staleReason).toBe("policy-changed");
   });
 
   it("records launch-failed sessions with retryable metadata", () => {

@@ -38,6 +38,13 @@ describe("indexDirectory", () => {
     expect(names).toContain("app.ts");
   });
 
+  it("should include root dotfiles so explorer can show live env files", () => {
+    const entries = indexDirectory(tmpDir);
+    const names = entries.map((e) => e.name);
+
+    expect(names).toContain(".env.production");
+  });
+
   it("should exclude node_modules", () => {
     const entries = indexDirectory(tmpDir);
     const names = entries.map((e) => e.name);

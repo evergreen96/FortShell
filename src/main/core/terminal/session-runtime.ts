@@ -1,5 +1,6 @@
 export type SessionLaunchMode =
   | "sandboxed"
+  | "plain-shell"
   | "plain-shell-fallback"
   | "launch-failed";
 
@@ -46,13 +47,33 @@ export function createSessionRuntime(input: {
   };
 }
 
+export function createUnprotectedSessionRuntime(input: {
+  terminalId: string;
+  displayName: string;
+  shell: string;
+  policyRevision: number;
+  layoutSlotKey?: string;
+}): TerminalSessionRuntime {
+  return {
+    terminalId: input.terminalId,
+    displayName: input.displayName,
+    shell: input.shell,
+    launchMode: "plain-shell",
+    trustState: "unprotected",
+    policyRevision: input.policyRevision,
+    startedAt: new Date().toISOString(),
+    layoutSlotKey: input.layoutSlotKey,
+  };
+}
+
 export function markPolicyRevisionChanged(
   runtime: TerminalSessionRuntime,
   nextPolicyRevision: number
 ): TerminalSessionRuntime {
   if (
     runtime.trustState === "exited" ||
-    runtime.launchMode !== "sandboxed" ||
+    runtime.trustState === "fallback" ||
+    runtime.trustState === "launch-failed" ||
     runtime.policyRevision === nextPolicyRevision
   ) {
     return runtime;

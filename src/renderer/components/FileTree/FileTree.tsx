@@ -22,6 +22,21 @@ type FileTreeProps = {
 
 export type FileTreeIconVariant = "folder" | "file";
 
+export function getFileTreeRelativePath(rootPath: string, entryPath: string): string {
+  const normalizedRoot = rootPath.replace(/\\/g, "/").replace(/\/+$/, "");
+  const normalizedEntry = entryPath.replace(/\\/g, "/");
+
+  if (normalizedEntry === normalizedRoot) {
+    return normalizedEntry.split("/").pop() ?? normalizedEntry;
+  }
+
+  if (normalizedEntry.startsWith(`${normalizedRoot}/`)) {
+    return normalizedEntry.slice(normalizedRoot.length + 1);
+  }
+
+  return normalizedEntry;
+}
+
 export function getFileTreeIconVariant({
   isDirectory,
   expanded,
@@ -183,6 +198,7 @@ function FileTreeNode({
     expanded,
     loading,
   });
+  const relativePath = getFileTreeRelativePath(rootPath, entry.path);
 
   async function handleToggle() {
     if (!entry.isDirectory) return;
@@ -203,6 +219,7 @@ function FileTreeNode({
     <div>
       <div
         className={`filetree-node ${isProtected ? "filetree-node-protected" : ""}`}
+        data-relative-path={relativePath}
         style={{ paddingLeft: `${depth * 16 + 8}px` }}
         onClick={handleToggle}
         onContextMenu={(e) => onContextMenu(e, entry)}

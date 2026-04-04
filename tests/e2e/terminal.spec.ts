@@ -200,4 +200,59 @@ test.describe("Policy Integration", () => {
       return await (window as any).electronAPI.policyRemove(fp);
     }, filePath);
   });
+
+  test("should compile a newly created root .env into protections after preset application", async () => {
+    const envPath = path.join(tmpDir, ".env");
+    try {
+      fs.rmSync(envPath, { force: true });
+    } catch {}
+
+    await page.evaluate(async (rootPath) => {
+      await (window as any).electronAPI.workspaceSetRoot(rootPath);
+    }, tmpDir);
+
+    await page.evaluate(async () => {
+      await (window as any).electronAPI.protectionApplyPreset("env-files");
+    });
+
+    fs.writeFileSync(envPath, "SECRET=1");
+    await page.waitForTimeout(1200);
+
+    const state = await page.evaluate(async () => {
+      return {
+        compiled: await (window as any).electronAPI.protectionListCompiled(),
+      };
+    });
+
+    expect(state.compiled.map((entry: any) => entry.relativePath)).toContain(".env");
+
+    fs.rmSync(envPath, { force: true });
+    await page.waitForTimeout(400);
+  });
+
+  test("should compile a newly created root .env into protections after adding an extension rule", async () => {
+    const envPath = path.join(tmpDir, ".env");
+    try {
+      fs.rmSync(envPath, { force: true });
+    } catch {}
+
+    await page.evaluate(async (rootPath) => {
+      await (window as any).electronAPI.workspaceSetRoot(rootPath);
+      await (window as any).electronAPI.protectionAddExtensionRule([".env"]);
+    }, tmpDir);
+
+    fs.writeFileSync(envPath, "SECRET=1");
+    await page.waitForTimeout(1200);
+
+    const state = await page.evaluate(async () => {
+      return {
+        compiled: await (window as any).electronAPI.protectionListCompiled(),
+      };
+    });
+
+    expect(state.compiled.map((entry: any) => entry.relativePath)).toContain(".env");
+
+    fs.rmSync(envPath, { force: true });
+    await page.waitForTimeout(400);
+  });
 });

@@ -74,13 +74,19 @@ function matchesExtensionRule(
     return false;
   }
 
-  const entryExt = entry.ext.trim().toLowerCase();
-  if (!entryExt) {
+  const lowerName = entry.name.trim().toLowerCase();
+  if (!lowerName) {
     return false;
   }
 
   const normalizedExtensions = rule.extensions.map(normalizeExtensionToken);
-  return normalizedExtensions.includes(entryExt);
+  return normalizedExtensions.some((extension) => {
+    return (
+      lowerName === extension ||
+      lowerName.endsWith(extension) ||
+      lowerName.startsWith(`${extension}.`)
+    );
+  });
 }
 
 function compilePresetRule(

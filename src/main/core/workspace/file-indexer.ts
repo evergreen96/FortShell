@@ -39,11 +39,9 @@ function shouldIgnoreEntry(
   entry: fs.Dirent,
   dirPath: string,
   rootPath: string,
-  ig: Ignore | null,
-  excludeRootDotfiles: boolean
+  ig: Ignore | null
 ): boolean {
   if (DEFAULT_IGNORE.has(entry.name)) return true;
-  if (excludeRootDotfiles && entry.name.startsWith(".") && dirPath === rootPath) return true;
 
   if (ig) {
     const relativePath = path.relative(rootPath, path.join(dirPath, entry.name));
@@ -93,7 +91,7 @@ export function indexDirectory(
   });
 
   for (const entry of entries) {
-    if (rootPath && shouldIgnoreEntry(entry, dirPath, rootPath, ig ?? null, depth === 0)) continue;
+    if (rootPath && shouldIgnoreEntry(entry, dirPath, rootPath, ig ?? null)) continue;
 
     const fullPath = path.join(dirPath, entry.name);
     const fileEntry: FileEntry = {
@@ -161,7 +159,7 @@ function searchDirectory(
   });
 
   for (const entry of entries) {
-    if (shouldIgnoreEntry(entry, dirPath, rootPath, ig, false)) continue;
+    if (shouldIgnoreEntry(entry, dirPath, rootPath, ig)) continue;
 
     const fullPath = path.join(dirPath, entry.name);
     const relativePath = path.relative(rootPath, fullPath).replace(/\\/g, "/");

@@ -3,6 +3,7 @@ import { getSandboxedSpawnArgs } from "../../platform/index";
 import type { PolicyEnforcer } from "../../platform/types";
 import {
   createSessionRuntime,
+  createUnprotectedSessionRuntime,
   markLaunchFallback,
   markLaunchFailed,
   markPolicyRevisionChanged,
@@ -161,12 +162,19 @@ export class PtyManager {
         }
       }
     } else {
-      runtime = markLaunchFallback(
-        runtime,
-        this.enforcer ? "sandbox unavailable" : "policy enforcement unavailable"
-      );
-
       try {
+        runtime = this.enforcer
+          ? createUnprotectedSessionRuntime({
+              terminalId: id,
+              displayName,
+              shell: shellName,
+              policyRevision: this.policyRevision,
+              layoutSlotKey: opts.layoutSlotKey,
+            })
+          : markLaunchFallback(
+              runtime,
+              "policy enforcement unavailable"
+            );
         ptyProcess = nodePty.spawn(shell, ["-l"], baseOpts);
         console.log(`[pty] Created: ${id}`);
       } catch (err) {

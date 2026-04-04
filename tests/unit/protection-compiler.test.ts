@@ -56,6 +56,45 @@ describe("compileProtectionRules", () => {
     expect(new Set(entries.map((entry) => entry.path)).size).toBe(entries.length);
   });
 
+  it("matches dotfile-style extension rules like .env and .env.local", () => {
+    const entries = compileProtectionRules({
+      workspaceRoot: "/repo",
+      rules: [{ id: "ext-env", kind: "extension", source: "extension", extensions: [".env"] }],
+      presetCatalog: BUILT_IN_PRESETS,
+      workspaceEntries: [
+        { path: "/repo/.env", relativePath: ".env", name: ".env", ext: "", isDirectory: false },
+        {
+          path: "/repo/.env.local",
+          relativePath: ".env.local",
+          name: ".env.local",
+          ext: ".local",
+          isDirectory: false,
+        },
+        {
+          path: "/repo/.env.production",
+          relativePath: ".env.production",
+          name: ".env.production",
+          ext: ".production",
+          isDirectory: false,
+        },
+        {
+          path: "/repo/config.env",
+          relativePath: "config.env",
+          name: "config.env",
+          ext: ".env",
+          isDirectory: false,
+        },
+      ],
+    });
+
+    expect(entries.map((entry) => entry.relativePath)).toEqual([
+      ".env",
+      ".env.local",
+      ".env.production",
+      "config.env",
+    ]);
+  });
+
   it("includes subtree entries for directory rules", () => {
     const entries = compileProtectionRules({
       workspaceRoot: "/repo",

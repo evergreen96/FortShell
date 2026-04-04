@@ -108,7 +108,7 @@ export type TerminalSessionMeta = {
   displayName: string;
   shell: string;
   trustState: TerminalTrustState;
-  launchMode: "sandboxed" | "plain-shell-fallback" | "launch-failed";
+  launchMode: "sandboxed" | "plain-shell" | "plain-shell-fallback" | "launch-failed";
   policyRevision: number;
   startedAt: string;
   layoutSlotKey?: string;
