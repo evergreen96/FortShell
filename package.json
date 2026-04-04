@@ -13,6 +13,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "npm run build && playwright test",
+    "bench:repo": "npm run build:main && node scripts/benchmarks/run-large-repo-benchmark.mjs",
     "package": "npm run build && electron-builder --config.mac.identity=null",
     "package:win": "npm run build && electron-builder --win",
     "package:mac": "npm run build && electron-builder --mac --config.mac.identity=null",
