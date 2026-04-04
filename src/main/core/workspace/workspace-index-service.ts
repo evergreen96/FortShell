@@ -53,7 +53,7 @@ export class WorkspaceIndexService {
       return [];
     }
 
-    return searchWorkspaceEntries(this.getEntries(), options);
+    return searchWorkspaceEntries(this.entries.values(), options);
   }
 
   markStale(): void {

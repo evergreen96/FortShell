@@ -107,7 +107,11 @@ export function registerIpcHandlers(
         } else {
           const delta = workspaceIndexService.handleChange(payload.filename);
           if (delta.changedEntries.length > 0 || delta.removedEntries.length > 0) {
-            policyEngine.setWorkspaceEntries(payload.rootPath, workspaceIndexService.getEntries());
+            policyEngine.updateWorkspaceEntriesForDelta(
+              payload.rootPath,
+              delta.changedEntries,
+              delta.removedEntries
+            );
             changed = await policyEngine.recomputeDynamicRulesForEntries(
               delta.changedEntries,
               delta.removedEntries

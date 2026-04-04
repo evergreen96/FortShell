@@ -767,6 +767,36 @@ describe("PolicyEngine", () => {
     expect(engine.isProtected(certPath)).toBe(false);
   });
 
+  it("updates cached workspace entries incrementally from indexed deltas", async () => {
+    await engine.setProjectRoot(tmpDir);
+
+    const certPath = path.join(tmpDir, "cert.pem");
+
+    expect(await engine.addExtensionRule([".pem"])).toEqual({ changed: true });
+    engine.setWorkspaceEntries(tmpDir, []);
+
+    fs.writeFileSync(certPath, "pem");
+    const certEntry = {
+      path: fs.realpathSync(certPath),
+      relativePath: "cert.pem",
+      name: "cert.pem",
+      isDirectory: false,
+    };
+
+    engine.updateWorkspaceEntriesForDelta(tmpDir, [certEntry], []);
+
+    expect(await engine.recomputeDynamicRulesForEntries([certEntry], [])).toBe(true);
+    expect(engine.listCompiledEntries().map((entry) => entry.relativePath)).toEqual([
+      "cert.pem",
+    ]);
+
+    fs.rmSync(certPath);
+    engine.updateWorkspaceEntriesForDelta(tmpDir, [], [certEntry]);
+
+    expect(await engine.recomputeDynamicRulesForEntries([], [certEntry])).toBe(true);
+    expect(engine.listCompiledEntries()).toEqual([]);
+  });
+
   it("restores the previous enforcer state when replacing rules fails mid-diff", async () => {
     await engine.setProjectRoot(tmpDir);
 

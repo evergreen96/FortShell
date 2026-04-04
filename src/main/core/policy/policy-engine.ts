@@ -279,6 +279,41 @@ function toWorkspaceProtectionEntries(
   ];
 }
 
+function toWorkspaceProtectionEntry(
+  entry: WorkspaceSearchResult
+): WorkspaceProtectionEntry {
+  return {
+    path: resolveRealPath(entry.path),
+    relativePath: entry.relativePath,
+    name: entry.name,
+    ext: entry.isDirectory ? "" : path.extname(entry.name),
+    isDirectory: entry.isDirectory,
+  };
+}
+
+function createWorkspaceEntriesMap(
+  projectRoot: string,
+  entries: readonly WorkspaceSearchResult[]
+): Map<string, WorkspaceProtectionEntry> {
+  const normalizedRoot = resolveRealPath(projectRoot);
+  const rootName = path.basename(normalizedRoot) || normalizedRoot;
+  const mappedEntries = new Map<string, WorkspaceProtectionEntry>();
+  mappedEntries.set(".", {
+    path: normalizedRoot,
+    relativePath: ".",
+    name: rootName,
+    ext: "",
+    isDirectory: true,
+  });
+
+  for (const entry of entries) {
+    const protectionEntry = toWorkspaceProtectionEntry(entry);
+    mappedEntries.set(protectionEntry.relativePath, protectionEntry);
+  }
+
+  return mappedEntries;
+}
+
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
@@ -296,7 +331,7 @@ export class PolicyEngine {
   private enforcer: PolicyEnforcer | null = null;
   private readonly policyStoreDir?: string;
   private policyRevision = 0;
-  private workspaceEntries: WorkspaceProtectionEntry[] | null = null;
+  private workspaceEntries: Map<string, WorkspaceProtectionEntry> | null = null;
   private workspaceEntriesRoot: string | null = null;
 
   constructor(options: PolicyEngineOptions = {}) {
@@ -318,7 +353,28 @@ export class PolicyEngine {
   setWorkspaceEntries(rootPath: string, entries: readonly WorkspaceSearchResult[]): void {
     const normalizedRoot = resolveRealPath(rootPath);
     this.workspaceEntriesRoot = normalizedRoot;
-    this.workspaceEntries = toWorkspaceProtectionEntries(normalizedRoot, entries);
+    this.workspaceEntries = createWorkspaceEntriesMap(normalizedRoot, entries);
+  }
+
+  updateWorkspaceEntriesForDelta(
+    rootPath: string,
+    changedEntries: readonly WorkspaceSearchResult[],
+    removedEntries: readonly WorkspaceSearchResult[] = []
+  ): void {
+    const normalizedRoot = resolveRealPath(rootPath);
+    if (this.workspaceEntriesRoot !== normalizedRoot || !this.workspaceEntries) {
+      this.workspaceEntriesRoot = normalizedRoot;
+      this.workspaceEntries = createWorkspaceEntriesMap(normalizedRoot, []);
+    }
+
+    for (const entry of removedEntries) {
+      this.workspaceEntries.delete(entry.relativePath);
+    }
+
+    for (const entry of changedEntries) {
+      const protectionEntry = toWorkspaceProtectionEntry(entry);
+      this.workspaceEntries.set(protectionEntry.relativePath, protectionEntry);
+    }
   }
 
   clearWorkspaceEntries(): void {
@@ -521,8 +577,7 @@ export class PolicyEngine {
       return false;
     }
 
-    const cachedEntries = this.getCachedWorkspaceEntries(this.projectRoot);
-    if (!cachedEntries) {
+    if (!this.getCachedWorkspaceEntries(this.projectRoot)) {
       return this.recomputeDynamicRules();
     }
 
@@ -565,7 +620,6 @@ export class PolicyEngine {
       compiledEntries: Array.from(compiledByPath.values()).sort((left, right) =>
         left.relativePath.localeCompare(right.relativePath)
       ),
-      workspaceEntries: cachedEntries,
     });
     const previousContext = this.getEffectivePolicyContextForSnapshot(currentSnapshot);
     const nextContext = this.getEffectivePolicyContextForSnapshot(nextSnapshot);
@@ -877,7 +931,7 @@ export class PolicyEngine {
       return null;
     }
 
-    return this.workspaceEntries.map((entry) => ({ ...entry }));
+    return Array.from(this.workspaceEntries.values(), (entry) => ({ ...entry }));
   }
 
   private getEnforcerTargetsForRules(

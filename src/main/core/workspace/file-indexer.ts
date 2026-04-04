@@ -201,7 +201,7 @@ export function listWorkspaceEntries(
 }
 
 export function searchWorkspaceEntries(
-  entries: readonly WorkspaceSearchResult[],
+  entries: Iterable<WorkspaceSearchResult>,
   options: WorkspaceSearchOptions = {}
 ): WorkspaceSearchResult[] {
   const normalizedOptions: Required<WorkspaceSearchOptions> = {

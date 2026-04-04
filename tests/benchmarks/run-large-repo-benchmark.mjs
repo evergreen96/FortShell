@@ -24,6 +24,9 @@ async function measure(label, fn) {
 }
 
 async function runSearchBenchmarks(rootDir) {
+  const workspaceIndexService = new WorkspaceIndexService();
+  await workspaceIndexService.setRoot(rootDir);
+  await workspaceIndexService.warm();
   const searches = [
     { label: "search:env", query: "env" },
     { label: "search:config", query: "config" },
@@ -35,6 +38,16 @@ async function runSearchBenchmarks(rootDir) {
     results.push(
       await measure(search.label, async () =>
         searchWorkspace(rootDir, {
+          query: search.query,
+          extensions: search.extensions,
+          includeDirectories: true,
+          limit: 50,
+        })
+      )
+    );
+    results.push(
+      await measure(`${search.label}:indexed`, async () =>
+        workspaceIndexService.search({
           query: search.query,
           extensions: search.extensions,
           includeDirectories: true,
@@ -76,7 +89,11 @@ async function runCompileBenchmarks(rootDir, sizeLabel) {
     "compile:recompute:create:.env.bench",
     async () => {
       const delta = workspaceIndexService.handleChange(".env.bench");
-      extensionEngine.setWorkspaceEntries(rootDir, workspaceIndexService.getEntries());
+      extensionEngine.updateWorkspaceEntriesForDelta(
+        rootDir,
+        delta.changedEntries,
+        delta.removedEntries
+      );
       await extensionEngine.recomputeDynamicRulesForEntries(
         delta.changedEntries,
         delta.removedEntries
@@ -99,7 +116,11 @@ async function runCompileBenchmarks(rootDir, sizeLabel) {
     "compile:recompute:create:.env.production",
     async () => {
       const delta = workspaceIndexService.handleChange(".env.production");
-      presetEngine.setWorkspaceEntries(rootDir, workspaceIndexService.getEntries());
+      presetEngine.updateWorkspaceEntriesForDelta(
+        rootDir,
+        delta.changedEntries,
+        delta.removedEntries
+      );
       await presetEngine.recomputeDynamicRulesForEntries(
         delta.changedEntries,
         delta.removedEntries
