@@ -74,4 +74,30 @@ describe("WorkspaceIndexService", () => {
       service.search({ query: "beta", includeDirectories: true, limit: 10 })
     ).toHaveLength(1);
   });
+
+  test("tracks ready-state file changes incrementally and returns a delta", async () => {
+    const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), "fortshell-index-"));
+    tempDirs.push(rootDir);
+    await fs.writeFile(path.join(rootDir, "alpha.txt"), "ok\n", "utf8");
+
+    const service = new WorkspaceIndexService();
+    await service.setRoot(rootDir);
+    await service.warm();
+
+    await fs.writeFile(path.join(rootDir, "beta.txt"), "ok\n", "utf8");
+    const created = service.handleChange("beta.txt");
+
+    expect(created.changedEntries.map((entry) => entry.relativePath)).toEqual(["beta.txt"]);
+    expect(created.removedEntries).toEqual([]);
+    expect(
+      service.search({ query: "beta", includeDirectories: true, limit: 10 }).map((entry) => entry.relativePath)
+    ).toEqual(["beta.txt"]);
+
+    await fs.rm(path.join(rootDir, "beta.txt"));
+    const removed = service.handleChange("beta.txt");
+
+    expect(removed.changedEntries).toEqual([]);
+    expect(removed.removedEntries.map((entry) => entry.relativePath)).toEqual(["beta.txt"]);
+    expect(service.search({ query: "beta", includeDirectories: true, limit: 10 })).toEqual([]);
+  });
 });

@@ -91,14 +91,42 @@ export function registerIpcHandlers(
     notifySessionStateChanged(ptyManager, policyEngine);
   });
   fileWatcher.onWorkspaceChanged(async (payload) => {
-    if (workspaceIndexService.getRootPath() === payload.rootPath) {
-      workspaceIndexService.markStale();
-      void workspaceIndexService.warm();
-    }
-
     const previousRevision = policyEngine.getPolicyRevision();
     try {
-      const changed = await policyEngine.recomputeDynamicRules();
+      let changed = false;
+      if (workspaceIndexService.getRootPath() === payload.rootPath) {
+        if (payload.eventType === "rename") {
+          workspaceIndexService.markStale();
+          policyEngine.clearWorkspaceEntries();
+          void workspaceIndexService.warm().then(() => {
+            if (workspaceIndexService.getRootPath() === payload.rootPath) {
+              policyEngine.setWorkspaceEntries(payload.rootPath, workspaceIndexService.getEntries());
+            }
+          });
+          changed = await policyEngine.recomputeDynamicRules();
+        } else {
+          const delta = workspaceIndexService.handleChange(payload.filename);
+          if (delta.changedEntries.length > 0 || delta.removedEntries.length > 0) {
+            policyEngine.setWorkspaceEntries(payload.rootPath, workspaceIndexService.getEntries());
+            changed = await policyEngine.recomputeDynamicRulesForEntries(
+              delta.changedEntries,
+              delta.removedEntries
+            );
+          } else {
+            workspaceIndexService.markStale();
+            policyEngine.clearWorkspaceEntries();
+            void workspaceIndexService.warm().then(() => {
+              if (workspaceIndexService.getRootPath() === payload.rootPath) {
+                policyEngine.setWorkspaceEntries(payload.rootPath, workspaceIndexService.getEntries());
+              }
+            });
+            changed = await policyEngine.recomputeDynamicRules();
+          }
+        }
+      } else {
+        changed = await policyEngine.recomputeDynamicRules();
+      }
+
       if (changed) {
         notifyPolicyMutation(ptyManager, policyEngine, previousRevision);
       }
@@ -169,7 +197,11 @@ export function registerIpcHandlers(
       throw err;
     }
     await workspaceIndexService.setRoot(resolvedPath);
-    void workspaceIndexService.warm();
+    void workspaceIndexService.warm().then(() => {
+      if (workspaceIndexService.getRootPath() === resolvedPath) {
+        policyEngine.setWorkspaceEntries(resolvedPath, workspaceIndexService.getEntries());
+      }
+    });
     fileWatcher.watch(resolvedPath);
     addRecentWorkspace(resolvedPath);
     return resolvedPath;
@@ -186,7 +218,11 @@ export function registerIpcHandlers(
       throw err;
     }
     await workspaceIndexService.setRoot(resolvedPath);
-    void workspaceIndexService.warm();
+    void workspaceIndexService.warm().then(() => {
+      if (workspaceIndexService.getRootPath() === resolvedPath) {
+        policyEngine.setWorkspaceEntries(resolvedPath, workspaceIndexService.getEntries());
+      }
+    });
     fileWatcher.watch(resolvedPath);
     addRecentWorkspace(resolvedPath);
     return resolvedPath;

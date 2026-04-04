@@ -10,6 +10,7 @@ import {
 
 const require = createRequire(import.meta.url);
 const { searchWorkspace } = require("../../dist-main/core/workspace/file-indexer.js");
+const { WorkspaceIndexService } = require("../../dist-main/core/workspace/workspace-index-service.js");
 const { PolicyEngine } = require("../../dist-main/core/policy/policy-engine.js");
 
 async function measure(label, fn) {
@@ -58,7 +59,12 @@ async function createPolicyEngine(rootDir, suffix) {
 }
 
 async function runCompileBenchmarks(rootDir, sizeLabel) {
+  const workspaceIndexService = new WorkspaceIndexService();
+  await workspaceIndexService.setRoot(rootDir);
+  await workspaceIndexService.warm();
+
   const extensionEngine = await createPolicyEngine(rootDir, `${sizeLabel}-extension`);
+  extensionEngine.setWorkspaceEntries(rootDir, workspaceIndexService.getEntries());
   const extensionApply = await measure("compile:apply:extension:.env", async () => {
     await extensionEngine.addExtensionRule([".env"]);
     return extensionEngine.listCompiledEntries();
@@ -69,13 +75,19 @@ async function runCompileBenchmarks(rootDir, sizeLabel) {
   const extensionRecompute = await measure(
     "compile:recompute:create:.env.bench",
     async () => {
-      await extensionEngine.recomputeDynamicRules();
+      const delta = workspaceIndexService.handleChange(".env.bench");
+      extensionEngine.setWorkspaceEntries(rootDir, workspaceIndexService.getEntries());
+      await extensionEngine.recomputeDynamicRulesForEntries(
+        delta.changedEntries,
+        delta.removedEntries
+      );
       return extensionEngine.listCompiledEntries();
     }
   );
   await extensionEngine.cleanup();
 
   const presetEngine = await createPolicyEngine(rootDir, `${sizeLabel}-preset`);
+  presetEngine.setWorkspaceEntries(rootDir, workspaceIndexService.getEntries());
   const presetApply = await measure("compile:apply:preset:env-files", async () => {
     await presetEngine.applyPreset("env-files");
     return presetEngine.listCompiledEntries();
@@ -86,7 +98,12 @@ async function runCompileBenchmarks(rootDir, sizeLabel) {
   const presetRecompute = await measure(
     "compile:recompute:create:.env.production",
     async () => {
-      await presetEngine.recomputeDynamicRules();
+      const delta = workspaceIndexService.handleChange(".env.production");
+      presetEngine.setWorkspaceEntries(rootDir, workspaceIndexService.getEntries());
+      await presetEngine.recomputeDynamicRulesForEntries(
+        delta.changedEntries,
+        delta.removedEntries
+      );
       return presetEngine.listCompiledEntries();
     }
   );

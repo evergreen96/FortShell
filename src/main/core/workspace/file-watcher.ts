@@ -18,6 +18,7 @@ export class FileWatcher {
   private watchers = new Map<string, fs.FSWatcher>();
   private debounceTimer: ReturnType<typeof setTimeout> | null = null;
   private listeners = new Set<(payload: WorkspaceChangePayload) => void | Promise<void>>();
+  private pendingChanges = new Map<string, WorkspaceChangePayload>();
 
   watch(dirPath: string): void {
     this.close();
@@ -65,26 +66,34 @@ export class FileWatcher {
     eventType: string,
     filename: string
   ): void {
-    // Debounce: batch rapid changes
+    const payload = { rootPath, eventType, filename };
+    this.pendingChanges.set(`${rootPath}\u0000${eventType}\u0000${filename}`, payload);
+
+    // Debounce: batch rapid changes but preserve each buffered change.
     if (this.debounceTimer) clearTimeout(this.debounceTimer);
     this.debounceTimer = setTimeout(() => {
-      const payload = { rootPath, eventType, filename };
+      const payloads = Array.from(this.pendingChanges.values());
+      this.pendingChanges.clear();
       const windows = BrowserWindow.getAllWindows();
-      for (const win of windows) {
-        if (!win.isDestroyed()) {
-          win.webContents.send("workspace:changed", payload);
+      for (const payload of payloads) {
+        for (const win of windows) {
+          if (!win.isDestroyed()) {
+            win.webContents.send("workspace:changed", payload);
+          }
         }
       }
 
-      for (const listener of this.listeners) {
-        try {
-          void Promise.resolve(listener(payload)).catch((err) => {
-            console.warn(`[workspace] Workspace change listener failed:`, err);
-          });
-        } catch (err) {
-          console.warn(`[workspace] Workspace change listener failed:`, err);
+      void (async () => {
+        for (const payload of payloads) {
+          for (const listener of this.listeners) {
+            try {
+              await Promise.resolve(listener(payload));
+            } catch (err) {
+              console.warn(`[workspace] Workspace change listener failed:`, err);
+            }
+          }
         }
-      }
+      })();
     }, 300);
   }
 
@@ -97,5 +106,6 @@ export class FileWatcher {
       clearTimeout(this.debounceTimer);
       this.debounceTimer = null;
     }
+    this.pendingChanges.clear();
   }
 }

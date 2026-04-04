@@ -1,5 +1,7 @@
 import fs from "fs";
+import path from "path";
 import {
+  createWorkspaceSearchResult,
   listWorkspaceEntries,
   searchWorkspaceEntries,
   type WorkspaceSearchOptions,
@@ -10,7 +12,7 @@ export type WorkspaceIndexState = "cold" | "warming" | "ready" | "stale";
 
 export class WorkspaceIndexService {
   private rootPath: string | null = null;
-  private entries: WorkspaceSearchResult[] = [];
+  private entries = new Map<string, WorkspaceSearchResult>();
   private state: WorkspaceIndexState = "cold";
   private warmPromise: Promise<void> | null = null;
 
@@ -20,7 +22,7 @@ export class WorkspaceIndexService {
     } catch {
       this.rootPath = rootPath;
     }
-    this.entries = [];
+    this.entries.clear();
     this.state = "cold";
     this.warmPromise = null;
   }
@@ -36,7 +38,9 @@ export class WorkspaceIndexService {
 
     this.state = "warming";
     this.warmPromise = (async () => {
-      this.entries = listWorkspaceEntries(this.rootPath!);
+      this.entries = new Map(
+        listWorkspaceEntries(this.rootPath!).map((entry) => [entry.relativePath, entry])
+      );
       this.state = "ready";
       this.warmPromise = null;
     })();
@@ -49,7 +53,7 @@ export class WorkspaceIndexService {
       return [];
     }
 
-    return searchWorkspaceEntries(this.entries, options);
+    return searchWorkspaceEntries(this.getEntries(), options);
   }
 
   markStale(): void {
@@ -66,5 +70,67 @@ export class WorkspaceIndexService {
 
   getRootPath(): string | null {
     return this.rootPath;
+  }
+
+  getEntries(): WorkspaceSearchResult[] {
+    return Array.from(this.entries.values()).sort((left, right) =>
+      left.relativePath.localeCompare(right.relativePath)
+    );
+  }
+
+  handleChange(filename: string): {
+    changedEntries: WorkspaceSearchResult[];
+    removedEntries: WorkspaceSearchResult[];
+  } {
+    if (!this.rootPath || this.state !== "ready") {
+      this.markStale();
+      return { changedEntries: [], removedEntries: [] };
+    }
+
+    const relativePath = filename
+      .replace(/\\/g, "/")
+      .replace(/^\.\/+/, "")
+      .replace(/^\/+/, "")
+      .replace(/\/+$/, "");
+    if (!relativePath) {
+      this.markStale();
+      return { changedEntries: [], removedEntries: [] };
+    }
+
+    const removedEntries: WorkspaceSearchResult[] = [];
+    for (const [candidatePath, entry] of this.entries.entries()) {
+      if (
+        candidatePath === relativePath ||
+        candidatePath.startsWith(`${relativePath}/`)
+      ) {
+        removedEntries.push(entry);
+        this.entries.delete(candidatePath);
+      }
+    }
+
+    const changedEntries: WorkspaceSearchResult[] = [];
+    const fullPath = path.join(this.rootPath, relativePath);
+
+    try {
+      const stats = fs.statSync(fullPath);
+      if (stats.isDirectory()) {
+        const directoryEntry = createWorkspaceSearchResult(this.rootPath, fullPath, true);
+        this.entries.set(directoryEntry.relativePath, directoryEntry);
+        changedEntries.push(directoryEntry);
+
+        for (const entry of listWorkspaceEntries(this.rootPath, fullPath)) {
+          this.entries.set(entry.relativePath, entry);
+          changedEntries.push(entry);
+        }
+      } else {
+        const entry = createWorkspaceSearchResult(this.rootPath, fullPath, false);
+        this.entries.set(entry.relativePath, entry);
+        changedEntries.push(entry);
+      }
+    } catch {
+      // Treat as removal only.
+    }
+
+    return { changedEntries, removedEntries };
   }
 }

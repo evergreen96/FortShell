@@ -4,7 +4,10 @@ import path from "path";
 import type { PolicyEnforcer } from "../../platform/types";
 import { loadWorkspacePolicy, saveWorkspacePolicy } from "../config/policy-store";
 import { resolveRealPath } from "../utils";
-import { searchWorkspace } from "../workspace/file-indexer";
+import {
+  searchWorkspace,
+  type WorkspaceSearchResult,
+} from "../workspace/file-indexer";
 import { compileProtectionRules } from "./protection-compiler";
 import {
   BUILT_IN_PRESETS,
@@ -12,6 +15,7 @@ import {
   type ProtectionPresetId,
   type ProtectionRule,
   type ProtectionWorkspacePolicy,
+  type WorkspaceProtectionEntry,
   getProtectionPresetById,
 } from "./protection-rules";
 
@@ -250,6 +254,31 @@ function buildWorkspaceEntries(projectRoot: string) {
   ];
 }
 
+function toWorkspaceProtectionEntries(
+  projectRoot: string,
+  entries: readonly WorkspaceSearchResult[]
+): WorkspaceProtectionEntry[] {
+  const normalizedRoot = resolveRealPath(projectRoot);
+  const rootName = path.basename(normalizedRoot) || normalizedRoot;
+
+  return [
+    {
+      path: normalizedRoot,
+      relativePath: ".",
+      name: rootName,
+      ext: "",
+      isDirectory: true,
+    },
+    ...entries.map((entry) => ({
+      path: resolveRealPath(entry.path),
+      relativePath: entry.relativePath,
+      name: entry.name,
+      ext: entry.isDirectory ? "" : path.extname(entry.name),
+      isDirectory: entry.isDirectory,
+    })),
+  ];
+}
+
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
@@ -267,6 +296,8 @@ export class PolicyEngine {
   private enforcer: PolicyEnforcer | null = null;
   private readonly policyStoreDir?: string;
   private policyRevision = 0;
+  private workspaceEntries: WorkspaceProtectionEntry[] | null = null;
+  private workspaceEntriesRoot: string | null = null;
 
   constructor(options: PolicyEngineOptions = {}) {
     this.policyStoreDir = options.policyStoreDir;
@@ -282,6 +313,17 @@ export class PolicyEngine {
 
   getProjectRoot(): string | null {
     return this.projectRoot;
+  }
+
+  setWorkspaceEntries(rootPath: string, entries: readonly WorkspaceSearchResult[]): void {
+    const normalizedRoot = resolveRealPath(rootPath);
+    this.workspaceEntriesRoot = normalizedRoot;
+    this.workspaceEntries = toWorkspaceProtectionEntries(normalizedRoot, entries);
+  }
+
+  clearWorkspaceEntries(): void {
+    this.workspaceEntriesRoot = null;
+    this.workspaceEntries = null;
   }
 
   async addPathRule(filePath: string): Promise<{ changed: boolean; reason?: string }> {
@@ -445,6 +487,86 @@ export class PolicyEngine {
 
     const currentSnapshot = this.getCurrentSnapshot();
     const nextSnapshot = this.buildPolicySnapshot(this.projectRoot, this.rules);
+    const previousContext = this.getEffectivePolicyContextForSnapshot(currentSnapshot);
+    const nextContext = this.getEffectivePolicyContextForSnapshot(nextSnapshot);
+
+    if (previousContext === nextContext) {
+      return false;
+    }
+
+    try {
+      await this.applyAddedEnforcerTargets(
+        currentSnapshot.enforcerTargets,
+        nextSnapshot.enforcerTargets
+      );
+      await this.removeDroppedEnforcerTargets(
+        currentSnapshot.enforcerTargets,
+        nextSnapshot.enforcerTargets
+      );
+    } catch (err) {
+      await this.rollbackToSnapshot(currentSnapshot);
+      throw err;
+    }
+
+    this.commitPolicySnapshot(nextSnapshot);
+    this.bumpPolicyRevision();
+    return true;
+  }
+
+  async recomputeDynamicRulesForEntries(
+    changedEntries: readonly WorkspaceSearchResult[],
+    removedEntries: readonly WorkspaceSearchResult[] = []
+  ): Promise<boolean> {
+    if (!this.projectRoot) {
+      return false;
+    }
+
+    const cachedEntries = this.getCachedWorkspaceEntries(this.projectRoot);
+    if (!cachedEntries) {
+      return this.recomputeDynamicRules();
+    }
+
+    const currentSnapshot = this.getCurrentSnapshot();
+    const compiledByPath = new Map(
+      currentSnapshot.compiledEntries.map((entry) => [entry.path, { ...entry }])
+    );
+
+    for (const entry of removedEntries) {
+      const normalizedPath = resolveRealPath(entry.path);
+      compiledByPath.delete(normalizedPath);
+    }
+
+    const changedWorkspaceEntries = changedEntries.map((entry) => ({
+      path: resolveRealPath(entry.path),
+      relativePath: entry.relativePath,
+      name: entry.name,
+      ext: entry.isDirectory ? "" : path.extname(entry.name),
+      isDirectory: entry.isDirectory,
+    }));
+
+    for (const entry of changedWorkspaceEntries) {
+      compiledByPath.delete(entry.path);
+    }
+
+    if (changedWorkspaceEntries.length > 0) {
+      const changedCompiledEntries = compileProtectionRules({
+        workspaceRoot: this.projectRoot,
+        rules: this.rules,
+        presetCatalog: BUILT_IN_PRESETS,
+        workspaceEntries: changedWorkspaceEntries,
+      });
+
+      for (const entry of changedCompiledEntries) {
+        compiledByPath.set(entry.path, entry);
+      }
+    }
+
+    const nextSnapshot = this.buildPolicySnapshot(this.projectRoot, this.rules, {
+      compiledEntries: Array.from(compiledByPath.values()).sort((left, right) =>
+        left.relativePath.localeCompare(right.relativePath)
+      ),
+      workspaceEntries: cachedEntries,
+    });
     const previousContext = this.getEffectivePolicyContextForSnapshot(currentSnapshot);
     const nextContext = this.getEffectivePolicyContextForSnapshot(nextSnapshot);
 
@@ -661,7 +783,11 @@ export class PolicyEngine {
 
   private buildPolicySnapshot(
     projectRoot: string | null,
-    rules: readonly ProtectionRule[]
+    rules: readonly ProtectionRule[],
+    options: {
+      workspaceEntries?: readonly WorkspaceProtectionEntry[];
+      compiledEntries?: readonly CompiledProtectionEntry[];
+    } = {}
   ): PolicySnapshot {
     const compiledEntries: CompiledProtectionEntry[] = [];
     const protectedPaths = new Set<string>();
@@ -680,14 +806,19 @@ export class PolicyEngine {
 
     if (projectRoot) {
       try {
-        compiledEntries.push(
-          ...compileProtectionRules({
-            workspaceRoot: projectRoot,
-            rules: normalizedRules,
-            presetCatalog: BUILT_IN_PRESETS,
-            workspaceEntries: buildWorkspaceEntries(projectRoot),
-          })
-        );
+        if (options.compiledEntries) {
+          compiledEntries.push(...options.compiledEntries.map((entry) => ({ ...entry })));
+        } else {
+          compiledEntries.push(
+            ...compileProtectionRules({
+              workspaceRoot: projectRoot,
+              rules: normalizedRules,
+              presetCatalog: BUILT_IN_PRESETS,
+              workspaceEntries:
+                options.workspaceEntries ?? this.getCachedWorkspaceEntries(projectRoot) ?? buildWorkspaceEntries(projectRoot),
+            })
+          );
+        }
       } catch (err) {
         console.warn(`[policy] Failed to compile protection rules:`, err);
       }
@@ -736,6 +867,17 @@ export class PolicyEngine {
     this.compiledEntries = snapshot.compiledEntries.map((entry) => ({ ...entry }));
     this.protectedPaths = new Set(snapshot.protectedPaths);
     this.protectedDirectories = new Set(snapshot.protectedDirectories);
+  }
+
+  private getCachedWorkspaceEntries(
+    projectRoot: string
+  ): WorkspaceProtectionEntry[] | null {
+    const normalizedRoot = resolveRealPath(projectRoot);
+    if (this.workspaceEntriesRoot !== normalizedRoot || !this.workspaceEntries) {
+      return null;
+    }
+
+    return this.workspaceEntries.map((entry) => ({ ...entry }));
   }
 
   private getEnforcerTargetsForRules(

@@ -24,6 +24,25 @@ export type WorkspaceSearchResult = {
   isDirectory: boolean;
 };
 
+function normalizeWorkspaceRelativePath(relativePath: string): string {
+  return relativePath.replace(/\\/g, "/").replace(/^\.\/+/, "").replace(/\/+$/, "");
+}
+
+export function createWorkspaceSearchResult(
+  rootPath: string,
+  fullPath: string,
+  isDirectory: boolean
+): WorkspaceSearchResult {
+  const relativePath = normalizeWorkspaceRelativePath(path.relative(rootPath, fullPath));
+
+  return {
+    name: path.basename(fullPath),
+    path: fullPath,
+    relativePath,
+    isDirectory,
+  };
+}
+
 function loadGitignore(rootPath: string): Ignore | null {
   const gitignorePath = path.join(rootPath, ".gitignore");
   try {
@@ -158,13 +177,7 @@ function collectWorkspaceEntries(
     if (shouldIgnoreEntry(entry, dirPath, rootPath, ig)) continue;
 
     const fullPath = path.join(dirPath, entry.name);
-    const relativePath = path.relative(rootPath, fullPath).replace(/\\/g, "/");
-    results.push({
-      name: entry.name,
-      path: fullPath,
-      relativePath,
-      isDirectory: entry.isDirectory(),
-    });
+    results.push(createWorkspaceSearchResult(rootPath, fullPath, entry.isDirectory()));
 
     if (entry.isDirectory()) {
       collectWorkspaceEntries(fullPath, rootPath, ig, results);
@@ -172,13 +185,18 @@ function collectWorkspaceEntries(
   }
 }
 
-export function listWorkspaceEntries(dirPath: string): WorkspaceSearchResult[] {
+export function listWorkspaceEntries(
+  dirPath: string,
+  startPath?: string
+): WorkspaceSearchResult[] {
   let rootPath = dirPath;
   try { rootPath = fs.realpathSync(dirPath); } catch {}
+  let traversalRoot = startPath ?? rootPath;
+  try { traversalRoot = fs.realpathSync(traversalRoot); } catch {}
 
   const ig = loadGitignore(rootPath);
   const results: WorkspaceSearchResult[] = [];
-  collectWorkspaceEntries(rootPath, rootPath, ig, results);
+  collectWorkspaceEntries(traversalRoot, rootPath, ig, results);
   return results;
 }
 
