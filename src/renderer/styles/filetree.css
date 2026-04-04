@@ -109,19 +109,27 @@
 }
 
 .filetree-icon {
+  align-items: center;
   color: var(--text-muted);
+  display: inline-flex;
   flex-shrink: 0;
-  font-size: 11px;
-  text-align: center;
-  width: 12px;
+  height: 14px;
+  justify-content: center;
+  width: 14px;
 }
 
-.filetree-icon-directory {
+.filetree-icon-svg {
+  display: block;
+  height: 14px;
+  width: 14px;
+}
+
+.filetree-icon-folder {
   color: rgba(0, 218, 243, 0.78);
 }
 
 .filetree-icon-file {
-  color: rgba(188, 201, 204, 0.62);
+  color: rgba(188, 201, 204, 0.78);
 }
 
 .filetree-name {

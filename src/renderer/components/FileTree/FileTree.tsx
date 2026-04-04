@@ -20,6 +20,25 @@ type FileTreeProps = {
   onOpenFolder: () => void;
 };
 
+export type FileTreeIconVariant = "folder" | "file";
+
+export function getFileTreeIconVariant({
+  isDirectory,
+  expanded,
+  loading,
+}: {
+  isDirectory: boolean;
+  expanded: boolean;
+  loading: boolean;
+}): FileTreeIconVariant {
+  if (!isDirectory) {
+    return "file";
+  }
+  void expanded;
+  void loading;
+  return "folder";
+}
+
 export function FileTree({
   rootPath,
   protectedPaths,
@@ -159,6 +178,11 @@ function FileTreeNode({
   const [children, setChildren] = useState<FileEntry[] | undefined>(entry.children);
   const [loading, setLoading] = useState(false);
   const isProtected = isPathProtected(entry.path, protectedPaths);
+  const iconVariant = getFileTreeIconVariant({
+    isDirectory: entry.isDirectory,
+    expanded,
+    loading,
+  });
 
   async function handleToggle() {
     if (!entry.isDirectory) return;
@@ -183,8 +207,8 @@ function FileTreeNode({
         onClick={handleToggle}
         onContextMenu={(e) => onContextMenu(e, entry)}
       >
-        <span className={`filetree-icon ${entry.isDirectory ? "filetree-icon-directory" : "filetree-icon-file"}`}>
-          {entry.isDirectory ? (loading ? "\u22EF" : expanded ? "\u25BE" : "\u25B8") : " "}
+        <span className={`filetree-icon filetree-icon-${iconVariant}`} aria-hidden="true">
+          <FileTreeIcon variant={iconVariant} />
         </span>
         <span className="filetree-name">{entry.name}</span>
         {isProtected && <span className="filetree-lock" title="Protected">LOCK</span>}
@@ -204,5 +228,57 @@ function FileTreeNode({
         </div>
       )}
     </div>
+  );
+}
+
+function FileTreeIcon({ variant }: { variant: FileTreeIconVariant }) {
+  if (variant === "file") {
+    return (
+      <svg
+        viewBox="0 0 16 16"
+        className="filetree-icon-svg"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <path
+          d="M4 1.75h5.05l2.95 2.95v8.05a1.5 1.5 0 0 1-1.5 1.5H4A1.5 1.5 0 0 1 2.5 12.75v-9.5A1.5 1.5 0 0 1 4 1.75Z"
+          fill="currentColor"
+          opacity="0.88"
+        />
+        <path
+          d="M9.05 1.75V4.7H12"
+          fill="currentColor"
+          opacity="0.55"
+        />
+        <path
+          d="M5.15 7.05H9.95M5.15 9.2H9.95M5.15 11.35H8.55"
+          stroke="currentColor"
+          strokeOpacity="0.72"
+          strokeLinecap="round"
+          strokeWidth="1"
+        />
+      </svg>
+    );
+  }
+
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      className="filetree-icon-svg"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        d="M1.75 4.45A1.7 1.7 0 0 1 3.45 2.75h2.1l1.12 1.2h5.88a1.7 1.7 0 0 1 1.7 1.7v5.9a1.7 1.7 0 0 1-1.7 1.7H3.45a1.7 1.7 0 0 1-1.7-1.7Z"
+        fill="currentColor"
+        opacity="0.88"
+      />
+      <path
+        d="M1.75 5.35h12.5"
+        stroke="currentColor"
+        strokeOpacity="0.42"
+        strokeWidth="1"
+      />
+    </svg>
   );
 }
