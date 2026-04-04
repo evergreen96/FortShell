@@ -1,22 +1,56 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { destroyTerminalCache } from "./components/Terminal/TerminalPane";
 import { TerminalWorkspace } from "./components/Layout/TerminalWorkspace";
 import { FileTree } from "./components/FileTree/FileTree";
 import { ProtectionCenter } from "./components/Protection/ProtectionCenter";
 import { Welcome } from "./components/Welcome/Welcome";
 import { Settings, type AppConfig } from "./components/Settings/Settings";
-import type { TerminalLayoutMode } from "./lib/terminalLayout";
-import type { ShellProfile } from "./lib/types";
+import {
+  getStaleSessions,
+  type TerminalLayoutMode,
+} from "./lib/terminalLayout";
+import {
+  applyTerminalReplacement,
+  applyTerminalReplacements,
+  reconcileActiveTerminalId,
+  type TerminalTabState,
+} from "./lib/terminalSessionState";
+import type {
+  CompiledProtectionEntry,
+  PolicyChangedPayload,
+  ProtectionMutationResult,
+  ProtectionPreset,
+  ProtectionRule,
+  ShellProfile,
+  TerminalSessionMeta,
+  TerminalSessionReplacement,
+  TerminalTrustState,
+} from "./lib/types";
+import {
+  getProtectionRuleRemovalToastMessage,
+  shouldApplyProtectionRefreshResult,
+  shouldRefreshForPolicyChange,
+} from "./lib/protection-refresh";
+import { buildExplorerProtectedPathSet } from "./lib/protection-paths";
 import "./lib/types";
 import "./styles/filetree.css";
 import "./styles/welcome.css";
 import "./styles/settings.css";
 
-type TerminalInfo = {
-  id: string;
-  name: string;
-  status: "active" | "exited";
-  stalePolicy?: boolean;
+type TerminalInfo = TerminalTabState;
+
+type TrustBadgeTone = "accent" | "warning" | "danger" | "muted";
+
+type TerminalView = TerminalInfo & {
+  trustState?: TerminalTrustState;
+  trustLabel?: string;
+  trustTone?: TrustBadgeTone;
+  trustTitle?: string;
+};
+
+type ToastState = {
+  id: number;
+  message: string;
 };
 
 const LAYOUT_MODES: TerminalLayoutMode[] = ["horizontal", "vertical", "grid"];
@@ -43,6 +77,68 @@ function ProtectionRailIcon() {
   );
 }
 
+function getTrustBadge(
+  session: TerminalSessionMeta | undefined,
+  status: TerminalInfo["status"],
+): { label: string; tone: TrustBadgeTone; title: string } | null {
+  if (status === "exited") {
+    return {
+      label: "exited",
+      tone: "muted",
+      title: "Session exited",
+    };
+  }
+
+  if (!session) {
+    return null;
+  }
+
+  switch (session.trustState) {
+    case "protected":
+      return {
+        label: "protected",
+        tone: "accent",
+        title: "Protected session",
+      };
+    case "unprotected":
+      return {
+        label: "unprotected",
+        tone: "muted",
+        title: "Unprotected session",
+      };
+    case "stale-policy":
+      return {
+        label: "stale policy",
+        tone: "warning",
+        title: "Policy changed. Restart to apply the latest protection state.",
+      };
+    case "fallback":
+      return {
+        label: "fallback",
+        tone: "warning",
+        title: session.launchFailureReason
+          ? `Protected launch fell back: ${session.launchFailureReason}`
+          : "Protected launch fell back to a plain shell.",
+      };
+    case "launch-failed":
+      return {
+        label: "launch failed",
+        tone: "danger",
+        title: session.launchFailureReason
+          ? `Protected launch failed: ${session.launchFailureReason}`
+          : "Protected launch failed.",
+      };
+    case "exited":
+      return {
+        label: "exited",
+        tone: "muted",
+        title: "Session exited",
+      };
+    default:
+      return null;
+  }
+}
+
 export function App() {
   const [terminals, setTerminals] = useState<TerminalInfo[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -50,13 +146,62 @@ export function App() {
   const [editingTabId, setEditingTabId] = useState<string | null>(null);
   const [layoutMode, setLayoutMode] = useState<TerminalLayoutMode>("horizontal");
   const [workspacePath, setWorkspacePath] = useState<string | null>(null);
-  const [protectedPaths, setProtectedPaths] = useState<Set<string>>(new Set());
+  const [protectionPresets, setProtectionPresets] = useState<ProtectionPreset[]>([]);
+  const [protectionRules, setProtectionRules] = useState<ProtectionRule[]>([]);
+  const [compiledProtections, setCompiledProtections] = useState<CompiledProtectionEntry[]>([]);
+  const [focusedSourceRuleId, setFocusedSourceRuleId] = useState<string | null>(null);
   const [sidebarVisible, setSidebarVisible] = useState(true);
   const [sidebarWidth, setSidebarWidth] = useState(250);
   const [showSettings, setShowSettings] = useState(false);
   const [fontSize, setFontSize] = useState(14);
   const [sidebarTab, setSidebarTab] = useState<"explorer" | "protection">("explorer");
+  const [sessionState, setSessionState] = useState<{
+    sessions: TerminalSessionMeta[];
+    policyRevision: number;
+  }>({
+    sessions: [],
+    policyRevision: 0,
+  });
+  const [toast, setToast] = useState<ToastState | null>(null);
   const sidebarDragRef = useRef<{ startX: number; startWidth: number } | null>(null);
+  const nextLayoutSlotRef = useRef(1);
+  const toastTimeoutRef = useRef<number | null>(null);
+  const bootstrappedWorkspaceRef = useRef<string | null>(null);
+  const latestProtectionRefreshRequestRef = useRef(0);
+  const workspacePathRef = useRef<string | null>(null);
+
+  const createLayoutSlotKey = useCallback(() => {
+    const nextValue = nextLayoutSlotRef.current++;
+    return `slot-${nextValue}`;
+  }, []);
+
+  const showToast = useCallback((message: string) => {
+    if (toastTimeoutRef.current !== null) {
+      window.clearTimeout(toastTimeoutRef.current);
+    }
+
+    setToast({
+      id: Date.now(),
+      message,
+    });
+
+    toastTimeoutRef.current = window.setTimeout(() => {
+      setToast(null);
+      toastTimeoutRef.current = null;
+    }, 2200);
+  }, []);
+
+  useEffect(() => {
+    workspacePathRef.current = workspacePath;
+  }, [workspacePath]);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimeoutRef.current !== null) {
+        window.clearTimeout(toastTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Menu bar Settings toggle
   useEffect(() => {
@@ -86,73 +231,221 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if (workspacePath) {
-      window.electronAPI.policyList().then((paths) => {
-        setProtectedPaths(new Set(paths));
-      });
-    }
-  }, [workspacePath]);
-
-  // Listen for policy changes — mark existing terminals as stale
-  useEffect(() => {
-    const unlisten = window.electronAPI.onPolicyChanged(() => {
-      setTerminals((prev) =>
-        prev.map((t) => (t.status === "active" ? { ...t, stalePolicy: true } : t))
-      );
-      // Refresh protected paths list
-      window.electronAPI.policyList().then((paths) => {
-        setProtectedPaths(new Set(paths));
-      });
+    const unlisten = window.electronAPI.onTerminalSessionState((payload) => {
+      setSessionState(payload);
     });
     return unlisten;
   }, []);
 
+  const refreshProtectionState = useCallback(async () => {
+    const requestedWorkspacePath = workspacePath;
+    const requestId = latestProtectionRefreshRequestRef.current + 1;
+    latestProtectionRefreshRequestRef.current = requestId;
+
+    if (!requestedWorkspacePath) {
+      if (
+        shouldApplyProtectionRefreshResult({
+          requestedWorkspacePath,
+          currentWorkspacePath: workspacePathRef.current,
+          requestId,
+          latestRequestId: latestProtectionRefreshRequestRef.current,
+        })
+      ) {
+        setProtectionPresets([]);
+        setProtectionRules([]);
+        setCompiledProtections([]);
+      }
+      return;
+    }
+
+    const [presets, rules, compiled] = await Promise.all([
+      window.electronAPI.protectionListPresets(),
+      window.electronAPI.protectionListRules(),
+      window.electronAPI.protectionListCompiled(),
+    ]);
+
+    if (
+      !shouldApplyProtectionRefreshResult({
+        requestedWorkspacePath,
+        currentWorkspacePath: workspacePathRef.current,
+        requestId,
+        latestRequestId: latestProtectionRefreshRequestRef.current,
+      })
+    ) {
+      return;
+    }
+
+    setProtectionPresets(presets);
+    setProtectionRules(rules);
+    setCompiledProtections(compiled);
+  }, [workspacePath]);
+
+  useEffect(() => {
+    setTerminals((prev) => {
+      const next = [...prev];
+      let changed = false;
+
+      for (let index = 0; index < next.length; index += 1) {
+        const terminal = next[index];
+        const session = sessionState.sessions.find(
+          (candidate) => candidate.terminalId === terminal.id
+        );
+
+        if (!session || terminal.status === "active") {
+          continue;
+        }
+
+        next[index] = {
+          ...terminal,
+          status: "active",
+        };
+        changed = true;
+      }
+
+      return changed ? next : prev;
+    });
+  }, [sessionState.sessions]);
+
+  useEffect(() => {
+    refreshProtectionState();
+  }, [refreshProtectionState]);
+
+  // Listen for policy changes and refresh protection state shown in the tree and console.
+  useEffect(() => {
+    const unlisten = window.electronAPI.onPolicyChanged((payload: PolicyChangedPayload) => {
+      if (
+        shouldRefreshForPolicyChange({
+          eventWorkspacePath: payload.workspacePath,
+          currentWorkspacePath: workspacePathRef.current,
+        })
+      ) {
+        refreshProtectionState();
+      }
+    });
+    return unlisten;
+  }, [refreshProtectionState]);
+
   async function openFolder() {
     const path = await window.electronAPI.openFolder();
-    if (path) setWorkspacePath(path);
+    if (path) {
+      setWorkspacePath(path);
+      setFocusedSourceRuleId(null);
+    }
   }
 
   async function handleSelectRecent(path: string) {
     const resolvedPath = await window.electronAPI.workspaceSetRoot(path);
     setWorkspacePath(resolvedPath);
+    setFocusedSourceRuleId(null);
   }
 
   const createTerminal = useCallback(
-    async (profileId?: string) => {
+    async (profileId?: string, slotKey?: string) => {
       const profile = profileId
         ? profiles.find((p) => p.id === profileId)
         : profiles.find((p) => p.isDefault) || profiles[0];
+      const nextSlotKey = slotKey ?? createLayoutSlotKey();
 
       const result = await window.electronAPI.terminalCreate({
         shell: profile?.command,
         cwd: workspacePath || undefined,
+        layoutSlotKey: nextSlotKey,
       });
-      setTerminals((prev) => [
-        ...prev,
-        { id: result.id, name: result.name, status: "active" },
-      ]);
+      setTerminals((prev) =>
+        prev.some((terminal) => terminal.id === result.id)
+          ? prev
+          : [
+              ...prev,
+              { id: result.id, name: result.name, status: "active", slotKey: nextSlotKey },
+            ]
+      );
       setActiveId(result.id);
+      return result.id;
     },
-    [profiles, workspacePath]
+    [createLayoutSlotKey, profiles, workspacePath]
   );
+
+  const removeTerminalLocally = useCallback((id: string) => {
+    destroyTerminalCache(id);
+    setTerminals((prev) => {
+      const next = prev.filter((terminal) => terminal.id !== id);
+      setActiveId((currentActiveId) => {
+        if (currentActiveId !== id) {
+          return currentActiveId;
+        }
+        return next.length > 0 ? next[next.length - 1].id : null;
+      });
+      return next;
+    });
+  }, []);
+
+  const applyReplacement = useCallback((replacement: TerminalSessionReplacement) => {
+    destroyTerminalCache(replacement.oldTerminalId);
+    setTerminals((prev) => applyTerminalReplacement(prev, replacement));
+    setActiveId((currentActiveId) =>
+      reconcileActiveTerminalId(currentActiveId, [replacement])
+    );
+  }, []);
+
+  const applyReplacementBatch = useCallback((replacements: TerminalSessionReplacement[]) => {
+    for (const replacement of replacements) {
+      destroyTerminalCache(replacement.oldTerminalId);
+    }
+
+    setTerminals((prev) => applyTerminalReplacements(prev, replacements));
+    setActiveId((currentActiveId) => {
+      return reconcileActiveTerminalId(currentActiveId, replacements);
+    });
+  }, []);
 
   async function destroyTerminal(id: string) {
     await window.electronAPI.terminalDestroy(id);
-    destroyTerminalCache(id);
-    setTerminals((prev) => {
-      const next = prev.filter((t) => t.id !== id);
-      if (activeId === id) {
-        setActiveId(next.length > 0 ? next[next.length - 1].id : null);
-      }
-      return next;
-    });
+    removeTerminalLocally(id);
   }
 
   async function restartTerminal(id: string) {
-    const terminal = terminals.find((t) => t.id === id);
-    if (!terminal) return;
-    await destroyTerminal(id);
-    await createTerminal();
+    const result = await window.electronAPI.terminalRestart(id);
+    if (result.ok && result.replacement) {
+      applyReplacement(result.replacement);
+      showToast("Session restarted");
+      return;
+    }
+
+    showToast("Restart unavailable");
+  }
+
+  async function restartAllStaleSessions() {
+    const result = await window.electronAPI.terminalRestartAllStale();
+    if (result.replacements.length > 0) {
+      applyReplacementBatch(result.replacements);
+      const label = result.replacements.length === 1 ? "session" : "sessions";
+      showToast(`Restarted ${result.replacements.length} stale ${label}`);
+      return;
+    }
+
+    showToast("No stale sessions");
+  }
+
+  async function retryProtectedSession(id: string) {
+    const result = await window.electronAPI.terminalRetryProtected(id);
+    if (result.ok && result.replacement) {
+      applyReplacement(result.replacement);
+      showToast("Protected retry started");
+      return;
+    }
+
+    showToast("Retry unavailable");
+  }
+
+  async function closeFailedSession(id: string) {
+    const result = await window.electronAPI.terminalCloseFailed(id);
+    if (result.closed) {
+      removeTerminalLocally(id);
+      showToast("Failed session closed");
+      return;
+    }
+
+    showToast("Close unavailable");
   }
 
   function handleConfigChange(config: AppConfig) {
@@ -164,39 +457,65 @@ export function App() {
   }
 
   async function handleProtect(filePath: string) {
-    await window.electronAPI.policySet(filePath);
-    // Refresh from engine to get realpath-resolved paths
-    const paths = await window.electronAPI.policyList();
-    setProtectedPaths(new Set(paths));
+    const changed = await window.electronAPI.policySet(filePath);
+    await refreshProtectionState();
+    showToast(changed ? "Path protected" : "Path already protected");
   }
 
   async function handleUnprotect(filePath: string) {
-    await window.electronAPI.policyRemove(filePath);
-    const paths = await window.electronAPI.policyList();
-    setProtectedPaths(new Set(paths));
+    const changed = await window.electronAPI.policyRemove(filePath);
+    await refreshProtectionState();
+    showToast(changed ? "Path unprotected" : "Path was not protected");
   }
 
-  async function handleProtectMany(filePaths: string[]): Promise<number> {
-    const uniquePaths = Array.from(new Set(filePaths));
-    if (uniquePaths.length === 0) return 0;
+  async function handleApplyPreset(
+    presetId: Parameters<typeof window.electronAPI.protectionApplyPreset>[0]
+  ): Promise<ProtectionMutationResult> {
+    const result = await window.electronAPI.protectionApplyPreset(presetId);
+    await refreshProtectionState();
+    showToast(result.changed ? "Preset applied" : "Preset already applied");
+    return result;
+  }
 
-    const results = await Promise.all(
-      uniquePaths.map(async (filePath) => {
-        try {
-          return await window.electronAPI.policySet(filePath);
-        } catch {
-          return false;
-        }
-      })
-    );
+  async function handleAddExtensionRule(
+    extensions: string[]
+  ): Promise<ProtectionMutationResult> {
+    const result = await window.electronAPI.protectionAddExtensionRule(extensions);
+    await refreshProtectionState();
+    showToast(result.changed ? "Batch rule added" : "Batch rule already active");
+    return result;
+  }
 
-    const protectedCount = results.filter(Boolean).length;
-    if (protectedCount > 0) {
-      const paths = await window.electronAPI.policyList();
-      setProtectedPaths(new Set(paths));
+  async function handleAddManualRule(targetPath: string): Promise<boolean> {
+    const changed = await window.electronAPI.policySet(targetPath);
+    await refreshProtectionState();
+    showToast(changed ? "Direct rule added" : "Path already protected");
+    return changed;
+  }
+
+  async function handleRemoveProtectionRule(ruleId: string): Promise<boolean> {
+    try {
+      const removed = await window.electronAPI.protectionRemoveRule(ruleId);
+      await refreshProtectionState();
+      showToast(getProtectionRuleRemovalToastMessage({ removed }));
+      return removed;
+    } catch (error) {
+      await refreshProtectionState();
+      showToast(getProtectionRuleRemovalToastMessage({ error }));
+      throw error;
     }
+  }
 
-    return protectedCount;
+  const handleViewProtection = useCallback((ruleId: string) => {
+    setSidebarTab("protection");
+    setFocusedSourceRuleId(ruleId);
+  }, []);
+
+  function handleFocusSource(ruleId: string) {
+    setFocusedSourceRuleId(null);
+    window.setTimeout(() => {
+      setFocusedSourceRuleId(ruleId);
+    }, 0);
   }
 
   // Sidebar drag resize
@@ -278,7 +597,18 @@ export function App() {
 
   // Auto-create first terminal when workspace is set
   useEffect(() => {
-    if (terminals.length === 0 && profiles.length > 0 && workspacePath) {
+    if (!workspacePath) {
+      bootstrappedWorkspaceRef.current = null;
+      return;
+    }
+
+    if (bootstrappedWorkspaceRef.current === workspacePath || profiles.length === 0) {
+      return;
+    }
+
+    bootstrappedWorkspaceRef.current = workspacePath;
+
+    if (terminals.length === 0) {
       createTerminal();
     }
   }, [profiles, workspacePath, createTerminal]);
@@ -286,6 +616,26 @@ export function App() {
   const workspaceName = workspacePath?.split(/[/\\]/).pop() || "workspace";
   const isExplorerView = sidebarTab === "explorer";
   const showExplorerPane = isExplorerView && sidebarVisible;
+  const sessionStateById = new Map<string, TerminalSessionMeta>(
+    sessionState.sessions.map((session) => [session.terminalId, session])
+  );
+  const staleSessions = getStaleSessions(sessionState.sessions);
+  const terminalViews: TerminalView[] = terminals.map((terminal) => {
+    const session = sessionStateById.get(terminal.id);
+    const badge = getTrustBadge(session, terminal.status);
+
+    return {
+      ...terminal,
+      trustState: session?.trustState ?? (terminal.status === "exited" ? "exited" : undefined),
+      trustLabel: badge?.label,
+      trustTone: badge?.tone,
+      trustTitle: badge?.title,
+    };
+  });
+  const explorerProtectedPaths = useMemo(
+    () => buildExplorerProtectedPathSet(compiledProtections),
+    [compiledProtections]
+  );
 
   // Welcome screen when no workspace is open
   if (!workspacePath) {
@@ -338,6 +688,22 @@ export function App() {
                 ))}
               </div>
             )}
+            {isExplorerView && (
+              <button
+                className="app-header-action app-header-action-warning"
+                disabled={staleSessions.length === 0}
+                onClick={() => {
+                  restartAllStaleSessions();
+                }}
+                title={
+                  staleSessions.length > 0
+                    ? `Restart ${staleSessions.length} stale protected session${staleSessions.length === 1 ? "" : "s"}`
+                    : "No stale sessions"
+                }
+              >
+                Restart All Stale Sessions
+              </button>
+            )}
             <button
               className="tab-new"
               onClick={() => {
@@ -351,24 +717,12 @@ export function App() {
         {isExplorerView && (
           <div className="tab-strip">
             <div className="tab-bar">
-              {terminals.map((t) => (
+              {terminalViews.map((t) => (
                 <div
                   key={t.id}
-                  className={`tab ${t.id === activeId ? "tab-active" : ""} ${t.status === "exited" ? "tab-exited" : ""} ${t.stalePolicy ? "tab-stale" : ""}`}
+                  className={`tab ${t.id === activeId ? "tab-active" : ""} ${t.status === "exited" ? "tab-exited" : ""} ${t.trustTone ? `tab-trust-${t.trustTone}` : ""}`}
                   onClick={() => setActiveId(t.id)}
                 >
-                  {t.stalePolicy && (
-                    <span
-                      className="tab-stale-icon"
-                      title="Policy changed — restart to apply"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        restartTerminal(t.id);
-                      }}
-                    >
-                      &#x21bb;
-                    </span>
-                  )}
                   {editingTabId === t.id ? (
                     <input
                       className="tab-label-input"
@@ -404,6 +758,14 @@ export function App() {
                       {t.name}
                     </span>
                   )}
+                  {t.trustLabel && (
+                    <span
+                      className={`tab-trust-badge tab-trust-badge-${t.trustTone ?? "muted"}`}
+                      title={t.trustTitle}
+                    >
+                      {t.trustLabel}
+                    </span>
+                  )}
                   <span
                     className="tab-close"
                     onClick={(e) => {
@@ -436,8 +798,8 @@ export function App() {
             onClick={() => setSidebarTab("protection")}
           >
             <ProtectionRailIcon />
-            {protectedPaths.size > 0 && (
-              <span className="nav-rail-badge">{protectedPaths.size}</span>
+            {compiledProtections.length > 0 && (
+              <span className="nav-rail-badge">{compiledProtections.length}</span>
             )}
           </button>
         </aside>
@@ -449,9 +811,11 @@ export function App() {
             >
               <FileTree
                 rootPath={workspacePath}
-                protectedPaths={protectedPaths}
+                protectedPaths={explorerProtectedPaths}
+                compiledEntries={compiledProtections}
                 onProtect={handleProtect}
                 onUnprotect={handleUnprotect}
+                onViewProtection={handleViewProtection}
                 onOpenFolder={openFolder}
               />
             </aside>
@@ -461,19 +825,28 @@ export function App() {
         <main className={`content-area ${isExplorerView ? "" : "content-area-protection"}`}>
           {isExplorerView ? (
             <TerminalWorkspace
-              terminals={terminals}
+              terminals={terminalViews}
               activeId={activeId}
               layoutMode={layoutMode}
               onSelectTerminal={setActiveId}
+              onRestartTerminal={restartTerminal}
+              onRetryProtected={retryProtectedSession}
+              onCloseFailed={closeFailedSession}
               fontSize={fontSize}
             />
           ) : (
             <ProtectionCenter
               rootPath={workspacePath}
-              protectedPaths={protectedPaths}
-              onProtect={handleProtect}
-              onProtectMany={handleProtectMany}
-              onUnprotect={handleUnprotect}
+              presets={protectionPresets}
+              rules={protectionRules}
+              compiledEntries={compiledProtections}
+              focusedSourceRuleId={focusedSourceRuleId}
+              onApplyPreset={handleApplyPreset}
+              onAddExtensionRule={handleAddExtensionRule}
+              onAddManualPath={handleAddManualRule}
+              onRemoveRule={handleRemoveProtectionRule}
+              onFocusSource={handleFocusSource}
+              onClearFocusedSource={() => setFocusedSourceRuleId(null)}
             />
           )}
         </main>
@@ -487,6 +860,11 @@ export function App() {
             window.electronAPI.terminalProfiles().then(setProfiles);
           }}
         />
+      )}
+      {toast && (
+        <div className="app-toast-region">
+          <div className="app-toast">{toast.message}</div>
+        </div>
       )}
     </div>
   );

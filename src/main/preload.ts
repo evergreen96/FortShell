@@ -1,4 +1,45 @@
 import { contextBridge, ipcRenderer } from "electron";
+import type { TerminalSessionRuntime } from "./core/terminal/session-runtime";
+import type {
+  CompiledProtectionEntry,
+  ProtectionPreset,
+  ProtectionPresetId,
+  ProtectionRule,
+  ProtectionWorkspacePolicy,
+} from "./core/policy/protection-rules";
+
+type TerminalSessionStatePayload = {
+  sessions: TerminalSessionRuntime[];
+  policyRevision: number;
+};
+
+type TerminalSessionReplacement = {
+  oldTerminalId: string;
+  newTerminalId: string;
+  displayName: string;
+  layoutSlotKey?: string;
+};
+
+type TerminalSessionActionResult = {
+  ok: boolean;
+  replacement?: TerminalSessionReplacement;
+  reason?: string;
+};
+
+type TerminalBulkRestartResult = {
+  replacements: TerminalSessionReplacement[];
+  skippedTerminalIds: string[];
+};
+
+type TerminalCloseFailedResult = {
+  closed: boolean;
+  terminalId: string;
+  reason?: string;
+};
+
+type PolicyChangedPayload = {
+  workspacePath: string | null;
+};
 
 contextBridge.exposeInMainWorld("electronAPI", {
   // Terminal
@@ -7,6 +48,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
     cols?: number;
     rows?: number;
     cwd?: string;
+    displayName?: string;
+    layoutSlotKey?: string;
   }) => ipcRenderer.invoke("terminal:create", opts),
   terminalWrite: (id: string, data: string) =>
     ipcRenderer.send("terminal:write", id, data),
@@ -14,6 +57,24 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.send("terminal:resize", id, cols, rows),
   terminalDestroy: (id: string) =>
     ipcRenderer.invoke("terminal:destroy", id),
+  onTerminalSessionState: (
+    callback: (payload: TerminalSessionStatePayload) => void
+  ) => {
+    const handler = (_event: Electron.IpcRendererEvent, payload: TerminalSessionStatePayload) =>
+      callback(payload);
+    ipcRenderer.on("terminal:session-state", handler);
+    return () => {
+      ipcRenderer.removeListener("terminal:session-state", handler);
+    };
+  },
+  terminalRestart: (id: string): Promise<TerminalSessionActionResult> =>
+    ipcRenderer.invoke("terminal:restart", id),
+  terminalRestartAllStale: () =>
+    ipcRenderer.invoke("terminal:restart-all-stale") as Promise<TerminalBulkRestartResult>,
+  terminalRetryProtected: (id: string): Promise<TerminalSessionActionResult> =>
+    ipcRenderer.invoke("terminal:retry-protected", id),
+  terminalCloseFailed: (id: string): Promise<TerminalCloseFailedResult> =>
+    ipcRenderer.invoke("terminal:close-failed", id),
 
   // Terminal data listener
   onTerminalData: (
@@ -76,6 +137,23 @@ contextBridge.exposeInMainWorld("electronAPI", {
   policyList: () => ipcRenderer.invoke("policy:list"),
   policyCheck: (filePath: string) =>
     ipcRenderer.invoke("policy:check", filePath),
+  protectionListPresets: () =>
+    ipcRenderer.invoke("protection:list-presets") as Promise<ProtectionPreset[]>,
+  protectionListRules: () => ipcRenderer.invoke("protection:list-rules") as Promise<ProtectionRule[]>,
+  protectionListCompiled: () =>
+    ipcRenderer.invoke("protection:list-compiled") as Promise<CompiledProtectionEntry[]>,
+  protectionApplyPreset: (presetId: ProtectionPresetId) =>
+    ipcRenderer.invoke("protection:apply-preset", presetId),
+  protectionAddExtensionRule: (extensions: string[]) =>
+    ipcRenderer.invoke("protection:add-extension-rule", extensions),
+  protectionAddDirectoryRule: (targetPath: string) =>
+    ipcRenderer.invoke("protection:add-directory-rule", targetPath),
+  protectionRemoveRule: (ruleId: string) =>
+    ipcRenderer.invoke("protection:remove-rule", ruleId) as Promise<boolean>,
+  protectionImport: (filePath: string) =>
+    ipcRenderer.invoke("protection:import", filePath),
+  protectionExport: () =>
+    ipcRenderer.invoke("protection:export") as Promise<ProtectionWorkspacePolicy | null>,
 
   // Workspace change listener
   onWorkspaceChanged: (
@@ -92,8 +170,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
   },
 
   // Policy change listener
-  onPolicyChanged: (callback: () => void) => {
-    const handler = () => callback();
+  onPolicyChanged: (callback: (payload: PolicyChangedPayload) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, payload: PolicyChangedPayload) =>
+      callback(payload);
     ipcRenderer.on("policy:changed", handler);
     return () => {
       ipcRenderer.removeListener("policy:changed", handler);

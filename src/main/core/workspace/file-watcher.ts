@@ -3,9 +3,21 @@ import path from "path";
 import { BrowserWindow } from "electron";
 import { DEFAULT_IGNORE } from "./constants";
 
+type WorkspaceChangePayload = {
+  rootPath: string;
+  eventType: string;
+  filename: string;
+};
+
+export function shouldIgnoreWorkspaceChange(filename: string): boolean {
+  const parts = filename.split(/[\\/]+/);
+  return parts.some((part) => DEFAULT_IGNORE.has(part));
+}
+
 export class FileWatcher {
   private watchers = new Map<string, fs.FSWatcher>();
   private debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  private listeners = new Set<(payload: WorkspaceChangePayload) => void | Promise<void>>();
 
   watch(dirPath: string): void {
     this.close();
@@ -16,10 +28,7 @@ export class FileWatcher {
         { recursive: true },
         (eventType, filename) => {
           if (!filename) return;
-          // Skip ignored directories
-          const parts = filename.split(path.sep);
-          if (parts.some((p) => DEFAULT_IGNORE.has(p))) return;
-          if (parts[0]?.startsWith(".")) return;
+          if (shouldIgnoreWorkspaceChange(filename)) return;
 
           this.notifyChange(dirPath, eventType, filename);
         }
@@ -32,7 +41,7 @@ export class FileWatcher {
       try {
         const watcher = fs.watch(dirPath, (eventType, filename) => {
           if (!filename) return;
-          if (DEFAULT_IGNORE.has(filename)) return;
+          if (shouldIgnoreWorkspaceChange(filename)) return;
           this.notifyChange(dirPath, eventType, filename);
         });
         this.watchers.set(dirPath, watcher);
@@ -40,6 +49,15 @@ export class FileWatcher {
         // Give up silently
       }
     }
+  }
+
+  onWorkspaceChanged(
+    listener: (payload: WorkspaceChangePayload) => void | Promise<void>
+  ): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
   }
 
   private notifyChange(
@@ -50,14 +68,21 @@ export class FileWatcher {
     // Debounce: batch rapid changes
     if (this.debounceTimer) clearTimeout(this.debounceTimer);
     this.debounceTimer = setTimeout(() => {
+      const payload = { rootPath, eventType, filename };
       const windows = BrowserWindow.getAllWindows();
       for (const win of windows) {
         if (!win.isDestroyed()) {
-          win.webContents.send("workspace:changed", {
-            rootPath,
-            eventType,
-            filename,
+          win.webContents.send("workspace:changed", payload);
+        }
+      }
+
+      for (const listener of this.listeners) {
+        try {
+          void Promise.resolve(listener(payload)).catch((err) => {
+            console.warn(`[workspace] Workspace change listener failed:`, err);
           });
+        } catch (err) {
+          console.warn(`[workspace] Workspace change listener failed:`, err);
         }
       }
     }, 300);

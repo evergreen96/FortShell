@@ -68,10 +68,25 @@ test.describe("Terminal Integration", () => {
     const methods = await page.evaluate(() => {
       const api = (window as any).electronAPI;
       return {
+        hasProtectionListPresets: typeof api.protectionListPresets === "function",
+        hasProtectionListRules: typeof api.protectionListRules === "function",
+        hasProtectionListCompiled: typeof api.protectionListCompiled === "function",
+        hasProtectionApplyPreset: typeof api.protectionApplyPreset === "function",
+        hasProtectionAddExtensionRule:
+          typeof api.protectionAddExtensionRule === "function",
+        hasProtectionAddDirectoryRule:
+          typeof api.protectionAddDirectoryRule === "function",
+        hasProtectionImport: typeof api.protectionImport === "function",
+        hasProtectionExport: typeof api.protectionExport === "function",
         hasTerminalCreate: typeof api.terminalCreate === "function",
         hasTerminalWrite: typeof api.terminalWrite === "function",
         hasTerminalResize: typeof api.terminalResize === "function",
         hasTerminalDestroy: typeof api.terminalDestroy === "function",
+        hasOnTerminalSessionState: typeof api.onTerminalSessionState === "function",
+        hasTerminalRestart: typeof api.terminalRestart === "function",
+        hasTerminalRestartAllStale: typeof api.terminalRestartAllStale === "function",
+        hasTerminalRetryProtected: typeof api.terminalRetryProtected === "function",
+        hasTerminalCloseFailed: typeof api.terminalCloseFailed === "function",
         hasPolicySet: typeof api.policySet === "function",
         hasPolicyRemove: typeof api.policyRemove === "function",
         hasPolicyList: typeof api.policyList === "function",
@@ -81,10 +96,23 @@ test.describe("Terminal Integration", () => {
       };
     });
 
+    expect(methods.hasProtectionListPresets).toBe(true);
+    expect(methods.hasProtectionListRules).toBe(true);
+    expect(methods.hasProtectionListCompiled).toBe(true);
+    expect(methods.hasProtectionApplyPreset).toBe(true);
+    expect(methods.hasProtectionAddExtensionRule).toBe(true);
+    expect(methods.hasProtectionAddDirectoryRule).toBe(true);
+    expect(methods.hasProtectionImport).toBe(true);
+    expect(methods.hasProtectionExport).toBe(true);
     expect(methods.hasTerminalCreate).toBe(true);
     expect(methods.hasTerminalWrite).toBe(true);
     expect(methods.hasTerminalResize).toBe(true);
     expect(methods.hasTerminalDestroy).toBe(true);
+    expect(methods.hasOnTerminalSessionState).toBe(true);
+    expect(methods.hasTerminalRestart).toBe(true);
+    expect(methods.hasTerminalRestartAllStale).toBe(true);
+    expect(methods.hasTerminalRetryProtected).toBe(true);
+    expect(methods.hasTerminalCloseFailed).toBe(true);
     expect(methods.hasPolicySet).toBe(true);
     expect(methods.hasPolicyRemove).toBe(true);
     expect(methods.hasPolicyList).toBe(true);
@@ -138,6 +166,36 @@ test.describe("Policy Integration", () => {
     expect(r2).toBe(false);
 
     // Cleanup
+    await page.evaluate(async (fp) => {
+      return await (window as any).electronAPI.policyRemove(fp);
+    }, filePath);
+  });
+
+  test("should expose compiled protection rows with concrete-path fields", async () => {
+    const filePath = path.join(tmpDir, "shielded.txt");
+    fs.writeFileSync(filePath, "shielded");
+
+    await page.evaluate(async (rootPath) => {
+      return await (window as any).electronAPI.workspaceSetRoot(rootPath);
+    }, tmpDir);
+
+    await page.evaluate(async (fp) => {
+      return await (window as any).electronAPI.policySet(fp);
+    }, filePath);
+
+    const compiled = await page.evaluate(async () => {
+      return await (window as any).electronAPI.protectionListCompiled();
+    });
+
+    expect(compiled).toHaveLength(1);
+    expect(compiled[0]).toMatchObject({
+      path: fs.realpathSync(filePath),
+      relativePath: "shielded.txt",
+      type: "file",
+      status: "shielded",
+      canRemoveDirectly: true,
+    });
+
     await page.evaluate(async (fp) => {
       return await (window as any).electronAPI.policyRemove(fp);
     }, filePath);

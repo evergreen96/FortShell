@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
+import { getExplorerContextMenuAction, isPathProtected } from "../../lib/protection-paths";
+import type { CompiledProtectionEntry } from "../../lib/types";
 
 type FileEntry = {
   name: string;
@@ -11,16 +13,20 @@ type FileEntry = {
 type FileTreeProps = {
   rootPath: string | null;
   protectedPaths: Set<string>;
+  compiledEntries: CompiledProtectionEntry[];
   onProtect: (path: string) => void;
   onUnprotect: (path: string) => void;
+  onViewProtection: (ruleId: string) => void;
   onOpenFolder: () => void;
 };
 
 export function FileTree({
   rootPath,
   protectedPaths,
+  compiledEntries,
   onProtect,
   onUnprotect,
+  onViewProtection,
   onOpenFolder,
 }: FileTreeProps) {
   const [entries, setEntries] = useState<FileEntry[]>([]);
@@ -54,6 +60,10 @@ export function FileTree({
     window.addEventListener("click", handler);
     return () => window.removeEventListener("click", handler);
   }, [contextMenu]);
+
+  const contextMenuAction = contextMenu
+    ? getExplorerContextMenuAction(contextMenu.entry.path, compiledEntries)
+    : null;
 
   if (!rootPath) {
     return (
@@ -97,7 +107,7 @@ export function FileTree({
           className="filetree-context-menu"
           style={{ left: contextMenu.x, top: contextMenu.y }}
         >
-          {isPathProtected(contextMenu.entry.path, protectedPaths) ? (
+          {contextMenuAction?.kind === "remove" ? (
             <button
               onClick={() => {
                 onUnprotect(contextMenu.entry.path);
@@ -105,6 +115,15 @@ export function FileTree({
               }}
             >
               Remove Protection
+            </button>
+          ) : contextMenuAction?.kind === "view-protection" ? (
+            <button
+              onClick={() => {
+                onViewProtection(contextMenuAction.sourceRuleId);
+                setContextMenu(null);
+              }}
+            >
+              View Protection
             </button>
           ) : (
             <button
@@ -121,17 +140,6 @@ export function FileTree({
       )}
     </div>
   );
-}
-
-function isPathProtected(filePath: string, protectedPaths: Set<string>): boolean {
-  if (protectedPaths.has(filePath)) return true;
-  for (const p of protectedPaths) {
-    // This file is inside a protected directory
-    if (filePath.startsWith(p + "/")) return true;
-    // This directory contains a protected file
-    if (p.startsWith(filePath + "/")) return true;
-  }
-  return false;
 }
 
 function FileTreeNode({
