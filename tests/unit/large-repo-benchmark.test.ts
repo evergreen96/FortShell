@@ -5,7 +5,7 @@ import { afterEach, describe, expect, test } from "vitest";
 import {
   createBenchmarkReportLines,
   generateLargeWorkspace,
-} from "../../scripts/benchmarks/lib/large-repo-benchmark.mjs";
+} from "../benchmarks/lib/large-repo-benchmark.mjs";
 
 const tempDirs: string[] = [];
 

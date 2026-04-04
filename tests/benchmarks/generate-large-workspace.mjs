@@ -4,7 +4,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const [, , rootDir, sizeLabel] = process.argv;
 
   if (!rootDir || !sizeLabel) {
-    console.error("Usage: node scripts/benchmarks/generate-large-workspace.mjs <rootDir> <5k|20k|50k>");
+    console.error("Usage: node tests/benchmarks/generate-large-workspace.mjs <rootDir> <5k|20k|50k>");
     process.exit(1);
   }
 
