@@ -222,14 +222,6 @@ export function ProtectionCenter({
       ),
     [rules]
   );
-  const directRules = useMemo(
-    () =>
-      rules.filter(
-        (rule): rule is Extract<ProtectionRule, { kind: "path" | "directory" }> =>
-          rule.kind === "path" || rule.kind === "directory"
-      ),
-    [rules]
-  );
   const compiledCountByRuleId = useMemo(() => {
     const counts = new Map<string, number>();
     for (const entry of compiledEntries) {
@@ -238,9 +230,6 @@ export function ProtectionCenter({
     return counts;
   }, [compiledEntries]);
   const workspaceName = rootPath.split(/[/\\]/).pop() || rootPath;
-  const directRuleCount = directRules.length;
-  const focusedManualRuleExists =
-    focusedSourceRuleId !== null && directRules.some((rule) => rule.id === focusedSourceRuleId);
 
   useEffect(() => {
     if (!focusedSourceRuleId) {
@@ -497,125 +486,108 @@ export function ProtectionCenter({
         <section className="protection-section-shell">
           <div className="protection-section-heading">
             <div>
-              <span className="protection-section-eyebrow">Presets</span>
-              <h3>Built-in policy packs</h3>
+              <span className="protection-section-eyebrow">Coverage</span>
+              <h3>Coverage Rules</h3>
             </div>
-            <p>Apply built-in coverage immediately. Reapplying gives feedback instead of duplicate rules.</p>
+            <p>
+              Add extension rules first for direct coverage, then use built-in presets when you want
+              fast default protection for common cases.
+            </p>
           </div>
-          <div className="protection-preset-grid">
-            {presets.map((preset) => {
-              const sourceRule = presetRules.get(preset.id);
-              const matchCount = sourceRule ? compiledCountByRuleId.get(sourceRule.id) ?? 0 : 0;
-              const isFocused = sourceRule?.id === focusedSourceRuleId;
-              return (
-                <article
-                  key={preset.id}
-                  className={`protection-preset-card ${sourceRule ? "protection-preset-card-applied" : ""} ${isFocused ? "protection-source-focused" : ""}`}
-                  ref={sourceRule ? setSourceRuleRef(sourceRule.id) : undefined}
-                  tabIndex={sourceRule ? -1 : undefined}
-                >
-                  <div className="protection-preset-head">
-                    <span className="protection-rule-badge">Preset</span>
-                    {sourceRule ? (
-                      <span className="protection-card-state">Applied</span>
-                    ) : (
-                      <span className="protection-card-state protection-card-state-muted">Ready</span>
-                    )}
+          <div className="protection-coverage-shell">
+            <div className="protection-rule-shell protection-coverage-rule-block">
+              <div className="protection-form-block">
+                <label className="protection-form-label" htmlFor="protection-extension-input">
+                  Extension List
+                </label>
+                <div className="protection-inline-form">
+                  <input
+                    id="protection-extension-input"
+                    className="protection-input"
+                    value={extensionInput}
+                    onChange={(event) => setExtensionInput(event.target.value)}
+                    placeholder=".env, .pem, .key"
+                  />
+                  <button
+                    className="protection-primary-action protection-primary-action-inline protection-primary-action-compact"
+                    disabled={pendingBatchAdd}
+                    onClick={handleAddBatchRule}
+                  >
+                    {pendingBatchAdd ? "Adding..." : "Add Rule"}
+                  </button>
+                </div>
+              </div>
+              <div className="protection-source-list">
+                {extensionRules.length === 0 ? (
+                  <div className="protection-source-empty">
+                    No extension rules yet. Add a rule to keep matching files protected
+                    automatically.
                   </div>
-                  <div className="protection-card-heading">
-                    <h3>{preset.label}</h3>
-                    <span>{preset.rules.length} selectors</span>
-                  </div>
-                  <p className="protection-card-copy">{preset.description}</p>
-                  <div className="protection-card-meta">
-                    <span>{sourceRule ? `${matchCount} concrete path${matchCount === 1 ? "" : "s"}` : "Not applied yet"}</span>
-                  </div>
-                  <div className="protection-card-actions">
-                    <button
-                      className="protection-primary-action"
-                      disabled={pendingPresetId === preset.id}
-                      onClick={() => handleApplyPreset(preset.id, preset.label)}
+                ) : (
+                  extensionRules.map((rule) => (
+                    <article
+                      key={rule.id}
+                      className={`protection-source-row ${focusedSourceRuleId === rule.id ? "protection-source-focused" : ""}`}
+                      ref={setSourceRuleRef(rule.id)}
+                      tabIndex={-1}
                     >
-                      {pendingPresetId === preset.id ? "Applying..." : "Apply"}
-                    </button>
-                    {sourceRule ? (
-                      renderRemoveAction(sourceRule.id, matchCount, setPresetFeedback)
-                    ) : null}
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-          <p className="protection-feedback">
-            {presetFeedback ||
-              "Use presets for common secret-bearing files before adding narrower rules."}
-          </p>
-        </section>
-
-        <section className="protection-section-shell">
-          <div className="protection-section-heading">
-            <div>
-              <span className="protection-section-eyebrow">Batch Rules</span>
-              <h3>Extension-driven coverage</h3>
-            </div>
-            <p>Batch rules only target extensions. New matching files are picked up as the workspace changes.</p>
-          </div>
-          <div className="protection-rule-shell">
-            <div className="protection-form-block">
-              <label className="protection-form-label" htmlFor="protection-extension-input">
-                Extension List
-              </label>
-              <div className="protection-inline-form">
-                <input
-                  id="protection-extension-input"
-                  className="protection-input"
-                  value={extensionInput}
-                  onChange={(event) => setExtensionInput(event.target.value)}
-                  placeholder=".env, .pem, .key"
-                />
-                <button
-                  className="protection-primary-action protection-primary-action-inline"
-                  disabled={pendingBatchAdd}
-                  onClick={handleAddBatchRule}
-                >
-                  {pendingBatchAdd ? "Adding..." : "Add Rule"}
-                </button>
+                      <div className="protection-source-copy">
+                        <div className="protection-source-meta">
+                          <span className="protection-rule-badge">{getRuleBadgeLabel(rule)}</span>
+                          <span>{compiledCountByRuleId.get(rule.id) ?? 0} matches</span>
+                        </div>
+                        <strong>{getRuleDetail(rule, presets)}</strong>
+                      </div>
+                      {renderRemoveAction(
+                        rule.id,
+                        compiledCountByRuleId.get(rule.id) ?? 0,
+                        setBatchFeedback
+                      )}
+                    </article>
+                  ))
+                )}
               </div>
             </div>
-            <div className="protection-source-list">
-              {extensionRules.length === 0 ? (
-                <div className="protection-source-empty">
-                  No extension rules yet. Add a rule to keep matching files protected automatically.
-                </div>
-              ) : (
-                extensionRules.map((rule) => (
+            <p className="protection-feedback">
+              {batchFeedback ||
+                "Batch rules are source-level policy. Concrete file matches appear below in the active list."}
+            </p>
+            <div className="protection-source-list protection-coverage-preset-list">
+              {presets.map((preset) => {
+                const sourceRule = presetRules.get(preset.id);
+                const matchCount = sourceRule ? compiledCountByRuleId.get(sourceRule.id) ?? 0 : 0;
+                const isFocused = sourceRule?.id === focusedSourceRuleId;
+                return (
                   <article
-                    key={rule.id}
-                    className={`protection-source-row ${focusedSourceRuleId === rule.id ? "protection-source-focused" : ""}`}
-                    ref={setSourceRuleRef(rule.id)}
-                    tabIndex={-1}
+                    key={preset.id}
+                    className={`protection-source-row protection-coverage-row ${isFocused ? "protection-source-focused" : ""}`}
+                    ref={sourceRule ? setSourceRuleRef(sourceRule.id) : undefined}
+                    tabIndex={sourceRule ? -1 : undefined}
                   >
-                    <div className="protection-source-copy">
-                      <div className="protection-source-meta">
-                        <span className="protection-rule-badge">{getRuleBadgeLabel(rule)}</span>
-                        <span>{compiledCountByRuleId.get(rule.id) ?? 0} matches</span>
-                      </div>
-                      <strong>{getRuleDetail(rule, presets)}</strong>
+                    <div className="protection-preset-simple-label">
+                      <strong>{preset.label}</strong>
                     </div>
-                    {renderRemoveAction(
-                      rule.id,
-                      compiledCountByRuleId.get(rule.id) ?? 0,
-                      setBatchFeedback
-                    )}
+                    <div className="protection-card-actions">
+                      {sourceRule ? (
+                        renderRemoveAction(sourceRule.id, matchCount, setPresetFeedback)
+                      ) : (
+                        <button
+                          className="protection-primary-action protection-primary-action-compact"
+                          disabled={pendingPresetId === preset.id}
+                          onClick={() => handleApplyPreset(preset.id, preset.label)}
+                        >
+                          {pendingPresetId === preset.id ? "Applying..." : "Apply"}
+                        </button>
+                      )}
+                    </div>
                   </article>
-                ))
-              )}
+                );
+              })}
             </div>
+            <p className="protection-feedback">
+              {presetFeedback || "Use built-in presets when you want fast default coverage."}
+            </p>
           </div>
-          <p className="protection-feedback">
-            {batchFeedback ||
-              "Batch rules are source-level policy. Concrete file matches appear below in the active list."}
-          </p>
         </section>
 
         <section className="protection-section-shell">
@@ -678,47 +650,10 @@ export function ProtectionCenter({
                 </p>
               ) : null}
             </div>
-            <div className="protection-manual-rules">
-              <div className="protection-subsection-heading">
-                <span className="protection-form-label">Direct Rules</span>
-                <span className="protection-subsection-count">{directRuleCount}</span>
-              </div>
-              <div className="protection-source-list">
-                {directRules.length === 0 ? (
-                  <div className="protection-source-empty">
-                    No direct rules yet. Add a specific file or folder from search results.
-                  </div>
-                ) : (
-                  directRules.map((rule) => (
-                    <article
-                      key={rule.id}
-                      className={`protection-source-row ${focusedSourceRuleId === rule.id ? "protection-source-focused" : ""}`}
-                      ref={setSourceRuleRef(rule.id)}
-                      tabIndex={-1}
-                    >
-                      <div className="protection-source-copy">
-                        <div className="protection-source-meta">
-                          <span className="protection-rule-badge">{getRuleBadgeLabel(rule)}</span>
-                          <span>{compiledCountByRuleId.get(rule.id) ?? 0} matches</span>
-                        </div>
-                        <strong>{getRuleDetail(rule, presets)}</strong>
-                      </div>
-                      {renderRemoveAction(
-                        rule.id,
-                        compiledCountByRuleId.get(rule.id) ?? 0,
-                        setManualFeedback
-                      )}
-                    </article>
-                  ))
-                )}
-              </div>
-            </div>
           </div>
           <p className="protection-feedback">
             {manualFeedback ||
-              (focusedManualRuleExists
-                ? "Source focus is on a direct rule. Remove it here to clear any generated child entries."
-                : "Direct rules can be removed here, or from the active list when the row is directly removable.")}
+              "Manual add is input-only. Manage direct rules from the active protection list."}
           </p>
         </section>
 
@@ -770,12 +705,16 @@ export function ProtectionCenter({
                           </span>
                         </td>
                         <td>
-                          <button
-                            className="protection-source-link"
-                            onClick={() => onFocusSource(entry.sourceRuleId)}
-                          >
-                            {entry.sourceLabel}
-                          </button>
+                          {entry.canRemoveDirectly ? (
+                            <span className="protection-source-label">{entry.sourceLabel}</span>
+                          ) : (
+                            <button
+                              className="protection-source-link"
+                              onClick={() => onFocusSource(entry.sourceRuleId)}
+                            >
+                              {entry.sourceLabel}
+                            </button>
+                          )}
                         </td>
                         <td>
                           <span className="protection-status-pill">Shielded</span>

@@ -1,5 +1,8 @@
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import {
+  ProtectionCenter,
   getBlockedSearchSummary,
   getProtectionAction,
   getRemovalImpactMessage,
@@ -26,6 +29,94 @@ describe("getProtectionAction", () => {
         canRemoveDirectly: false,
       })
     ).toBe("view-source");
+  });
+});
+
+describe("ProtectionCenter coverage rules layout", () => {
+  it("renders extension controls first and keeps preset rows minimal", () => {
+    const markup = renderToStaticMarkup(
+      createElement(ProtectionCenter, {
+        rootPath: "/repo",
+        presets: [
+          {
+            id: "env-files",
+            label: "Env Files",
+            description: "Protect common env files.",
+            rules: [{ kind: "path", value: ".env" }],
+          },
+        ],
+        rules: [
+          {
+            id: "rule-extension-1",
+            kind: "extension",
+            source: "extension",
+            extensions: [".env"],
+          },
+        ],
+        compiledEntries: [],
+        focusedSourceRuleId: null,
+        onApplyPreset: async () => ({ changed: true }),
+        onAddExtensionRule: async () => ({ changed: true }),
+        onAddManualPath: async () => true,
+        onRemoveRule: async () => true,
+        onFocusSource: () => {},
+        onClearFocusedSource: () => {},
+      })
+    );
+
+    expect(markup).toContain("Coverage Rules");
+    expect(markup).not.toContain("Built-in policy packs");
+    expect(markup).not.toContain("Extension-driven coverage");
+    expect(markup.indexOf("Extension List")).toBeLessThan(markup.indexOf("Env Files"));
+    expect(markup).toContain("Env Files");
+    expect(markup).not.toContain("selectors");
+    expect(markup).not.toContain("Protect common env files.");
+    expect(markup).toContain("Add Rule");
+    expect(markup).toContain("protection-source-row");
+    expect(markup).not.toContain("protection-preset-card");
+  });
+
+  it("keeps manual add as input-only and removes the separate direct rules list", () => {
+    const markup = renderToStaticMarkup(
+      createElement(ProtectionCenter, {
+        rootPath: "/repo",
+        presets: [],
+        rules: [
+          {
+            id: "rule-path-1",
+            kind: "path",
+            source: "manual",
+            targetPath: ".env",
+          },
+        ],
+        compiledEntries: [
+          {
+            name: ".env",
+            path: "/repo/.env",
+            relativePath: ".env",
+            isDirectory: false,
+            type: "file",
+            status: "shielded",
+            canRemoveDirectly: true,
+            sourceRuleId: "rule-path-1",
+            sourceKind: "path",
+            sourceLabel: "Manual Path",
+          },
+        ],
+        focusedSourceRuleId: null,
+        onApplyPreset: async () => ({ changed: true }),
+        onAddExtensionRule: async () => ({ changed: true }),
+        onAddManualPath: async () => true,
+        onRemoveRule: async () => true,
+        onFocusSource: () => {},
+        onClearFocusedSource: () => {},
+      })
+    );
+
+    expect(markup).not.toContain("Direct Rules");
+    expect(markup).not.toContain("No direct rules yet.");
+    expect(markup).toContain("Active Protection List");
+    expect(markup).toContain("Manual Path");
   });
 });
 

@@ -1192,8 +1192,7 @@ button {
   margin-bottom: 18px;
 }
 
-.protection-section-eyebrow,
-.protection-card-heading span {
+.protection-section-eyebrow {
   color: var(--text-muted);
   font-family: var(--font-label);
   font-size: 10px;
@@ -1216,31 +1215,31 @@ button {
   max-width: 500px;
 }
 
-.protection-preset-grid {
+.protection-coverage-shell {
   display: grid;
-  gap: 16px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
 }
 
-.protection-preset-card {
-  background:
-    linear-gradient(180deg, rgba(23, 28, 35, 0.94), rgba(10, 14, 20, 0.98)),
-    radial-gradient(circle at top right, rgba(255, 215, 153, 0.08), transparent 40%);
-  border: 1px solid rgba(60, 73, 76, 0.14);
-  border-radius: 4px;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  min-height: 238px;
-  padding: 18px;
+.protection-coverage-preset-list {
+  gap: 10px;
 }
 
-.protection-preset-card-applied {
-  border-color: rgba(0, 218, 243, 0.24);
+.protection-coverage-row {
+  align-items: center;
 }
 
-.protection-preset-head,
-.protection-card-meta,
+.protection-preset-simple-label {
+  min-width: 0;
+}
+
+.protection-preset-simple-label strong {
+  color: var(--text-primary);
+  display: block;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
 .protection-source-meta,
 .protection-subsection-heading {
   align-items: center;
@@ -1249,27 +1248,6 @@ button {
   justify-content: space-between;
 }
 
-.protection-card-heading {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.protection-card-heading h3 {
-  color: var(--text-primary);
-  font-size: 20px;
-  font-weight: 700;
-  letter-spacing: -0.03em;
-}
-
-.protection-card-copy {
-  color: var(--text-secondary);
-  flex: 1;
-  font-size: 14px;
-  line-height: 1.65;
-}
-
-.protection-card-state,
 .protection-rule-badge,
 .protection-subsection-count {
   align-items: center;
@@ -1284,20 +1262,6 @@ button {
   letter-spacing: 0.12em;
   min-height: 26px;
   padding: 0 10px;
-  text-transform: uppercase;
-}
-
-.protection-card-state-muted {
-  background: rgba(28, 32, 38, 0.84);
-  border-color: rgba(60, 73, 76, 0.24);
-  color: var(--text-secondary);
-}
-
-.protection-card-meta {
-  color: var(--text-muted);
-  font-family: var(--font-label);
-  font-size: 10px;
-  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
@@ -1366,6 +1330,13 @@ button {
 
 .protection-primary-action-inline {
   flex-shrink: 0;
+}
+
+.protection-primary-action-compact {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  min-height: 34px;
+  padding: 0 12px;
 }
 
 .protection-secondary-action {
@@ -1440,8 +1411,8 @@ button {
   gap: 18px;
 }
 
-.protection-manual-shell {
-  grid-template-columns: minmax(0, 1.3fr) minmax(280px, 0.9fr);
+.protection-coverage-rule-block {
+  gap: 14px;
 }
 
 .protection-source-list {
@@ -1596,6 +1567,12 @@ button {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.protection-source-label {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .protection-search-item-action {
@@ -1795,7 +1772,6 @@ button {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .protection-preset-grid,
   .protection-manual-shell {
     grid-template-columns: 1fr;
   }
@@ -1833,7 +1809,6 @@ button {
     flex-direction: column;
   }
 
-  .protection-preset-grid,
   .protection-summary-grid,
   .protection-search-results {
     grid-template-columns: 1fr;
