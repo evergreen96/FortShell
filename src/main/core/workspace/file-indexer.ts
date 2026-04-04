@@ -134,16 +134,12 @@ function matchesExtension(name: string, extension: string): boolean {
   );
 }
 
-function searchDirectory(
+function collectWorkspaceEntries(
   dirPath: string,
   rootPath: string,
   ig: Ignore | null,
-  options: Required<WorkspaceSearchOptions>,
-  normalizedExtensions: string[],
   results: WorkspaceSearchResult[]
 ): void {
-  if (results.length >= options.limit) return;
-
   let entries: fs.Dirent[];
   try {
     entries = fs.readdirSync(dirPath, { withFileTypes: true });
@@ -163,42 +159,33 @@ function searchDirectory(
 
     const fullPath = path.join(dirPath, entry.name);
     const relativePath = path.relative(rootPath, fullPath).replace(/\\/g, "/");
-    const lowerName = entry.name.toLowerCase();
-    const lowerRelativePath = relativePath.toLowerCase();
-    const matchesQuery =
-      !options.query ||
-      lowerName.includes(options.query) ||
-      lowerRelativePath.includes(options.query);
-    const matchesExtensions =
-      normalizedExtensions.length === 0 ||
-      (!entry.isDirectory() &&
-        normalizedExtensions.some((extension) => matchesExtension(entry.name, extension)));
-    const includeEntry = entry.isDirectory() ? options.includeDirectories : true;
-
-    if (includeEntry && matchesQuery && matchesExtensions) {
-      results.push({
-        name: entry.name,
-        path: fullPath,
-        relativePath,
-        isDirectory: entry.isDirectory(),
-      });
-      if (results.length >= options.limit) return;
-    }
+    results.push({
+      name: entry.name,
+      path: fullPath,
+      relativePath,
+      isDirectory: entry.isDirectory(),
+    });
 
     if (entry.isDirectory()) {
-      searchDirectory(fullPath, rootPath, ig, options, normalizedExtensions, results);
-      if (results.length >= options.limit) return;
+      collectWorkspaceEntries(fullPath, rootPath, ig, results);
     }
   }
 }
 
-export function searchWorkspace(
-  dirPath: string,
-  options: WorkspaceSearchOptions = {}
-): WorkspaceSearchResult[] {
+export function listWorkspaceEntries(dirPath: string): WorkspaceSearchResult[] {
   let rootPath = dirPath;
   try { rootPath = fs.realpathSync(dirPath); } catch {}
 
+  const ig = loadGitignore(rootPath);
+  const results: WorkspaceSearchResult[] = [];
+  collectWorkspaceEntries(rootPath, rootPath, ig, results);
+  return results;
+}
+
+export function searchWorkspaceEntries(
+  entries: readonly WorkspaceSearchResult[],
+  options: WorkspaceSearchOptions = {}
+): WorkspaceSearchResult[] {
   const normalizedOptions: Required<WorkspaceSearchOptions> = {
     includeDirectories: options.includeDirectories ?? true,
     limit: options.limit ?? 50,
@@ -208,9 +195,36 @@ export function searchWorkspace(
   const normalizedExtensions = normalizedOptions.extensions
     .map(normalizeExtensionToken)
     .filter((value): value is string => Boolean(value));
-  const ig = loadGitignore(rootPath);
+
   const results: WorkspaceSearchResult[] = [];
 
-  searchDirectory(rootPath, rootPath, ig, normalizedOptions, normalizedExtensions, results);
+  for (const entry of entries) {
+    const lowerName = entry.name.toLowerCase();
+    const lowerRelativePath = entry.relativePath.toLowerCase();
+    const matchesQuery =
+      !normalizedOptions.query ||
+      lowerName.includes(normalizedOptions.query) ||
+      lowerRelativePath.includes(normalizedOptions.query);
+    const matchesExtensions =
+      normalizedExtensions.length === 0 ||
+      (!entry.isDirectory &&
+        normalizedExtensions.some((extension) => matchesExtension(entry.name, extension)));
+    const includeEntry = entry.isDirectory ? normalizedOptions.includeDirectories : true;
+
+    if (includeEntry && matchesQuery && matchesExtensions) {
+      results.push(entry);
+      if (results.length >= normalizedOptions.limit) {
+        break;
+      }
+    }
+  }
+
   return results;
+}
+
+export function searchWorkspace(
+  dirPath: string,
+  options: WorkspaceSearchOptions = {}
+): WorkspaceSearchResult[] {
+  return searchWorkspaceEntries(listWorkspaceEntries(dirPath), options);
 }

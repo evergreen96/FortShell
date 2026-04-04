@@ -3,6 +3,7 @@ import path from "path";
 import { PtyManager } from "./core/terminal/pty-manager";
 import { PolicyEngine } from "./core/policy/policy-engine";
 import { FileWatcher } from "./core/workspace/file-watcher";
+import { WorkspaceIndexService } from "./core/workspace/workspace-index-service";
 import { registerIpcHandlers } from "./core/ipc/handlers";
 import { createPolicyEnforcer } from "./platform/index";
 
@@ -13,6 +14,7 @@ if (process.env.FORTSHELL_USER_DATA_DIR) {
 const ptyManager = new PtyManager();
 const policyEngine = new PolicyEngine();
 const fileWatcher = new FileWatcher();
+const workspaceIndexService = new WorkspaceIndexService();
 const enforcer = createPolicyEnforcer();
 policyEngine.setEnforcer(enforcer);
 ptyManager.setEnforcer(enforcer);
@@ -49,7 +51,7 @@ function createWindow(): void {
   });
 }
 
-registerIpcHandlers(ptyManager, policyEngine, fileWatcher);
+registerIpcHandlers(ptyManager, policyEngine, fileWatcher, workspaceIndexService);
 
 function buildMenu(): void {
   const template: Electron.MenuItemConstructorOptions[] = [

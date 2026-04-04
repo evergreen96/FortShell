@@ -9,6 +9,7 @@ import {
   type WorkspaceSearchOptions,
 } from "../workspace/file-indexer";
 import { FileWatcher } from "../workspace/file-watcher";
+import { WorkspaceIndexService } from "../workspace/workspace-index-service";
 import { PolicyEngine } from "../policy/policy-engine";
 import {
   BUILT_IN_PRESETS,
@@ -82,13 +83,19 @@ function safeHandle(
 export function registerIpcHandlers(
   ptyManager: PtyManager,
   policyEngine: PolicyEngine,
-  fileWatcher: FileWatcher
+  fileWatcher: FileWatcher,
+  workspaceIndexService: WorkspaceIndexService
 ): void {
   ptyManager.setPolicyRevision(policyEngine.getPolicyRevision());
   ptyManager.onSessionStateChanged(() => {
     notifySessionStateChanged(ptyManager, policyEngine);
   });
-  fileWatcher.onWorkspaceChanged(async () => {
+  fileWatcher.onWorkspaceChanged(async (payload) => {
+    if (workspaceIndexService.getRootPath() === payload.rootPath) {
+      workspaceIndexService.markStale();
+      void workspaceIndexService.warm();
+    }
+
     const previousRevision = policyEngine.getPolicyRevision();
     try {
       const changed = await policyEngine.recomputeDynamicRules();
@@ -161,6 +168,8 @@ export function registerIpcHandlers(
       notifyPolicyMutationIfChanged(ptyManager, policyEngine, previousRevision);
       throw err;
     }
+    await workspaceIndexService.setRoot(resolvedPath);
+    void workspaceIndexService.warm();
     fileWatcher.watch(resolvedPath);
     addRecentWorkspace(resolvedPath);
     return resolvedPath;
@@ -176,6 +185,8 @@ export function registerIpcHandlers(
       notifyPolicyMutationIfChanged(ptyManager, policyEngine, previousRevision);
       throw err;
     }
+    await workspaceIndexService.setRoot(resolvedPath);
+    void workspaceIndexService.warm();
     fileWatcher.watch(resolvedPath);
     addRecentWorkspace(resolvedPath);
     return resolvedPath;
@@ -194,6 +205,20 @@ export function registerIpcHandlers(
   });
 
   safeHandle("workspace:search", (_event, dirPath: string, options: WorkspaceSearchOptions) => {
+    let resolvedPath = dirPath;
+    try {
+      resolvedPath = fs.realpathSync(dirPath);
+    } catch {}
+
+    if (workspaceIndexService.getRootPath() === resolvedPath) {
+      const state = workspaceIndexService.getState();
+      if (state === "ready") {
+        return workspaceIndexService.search(options);
+      }
+
+      void workspaceIndexService.warm();
+    }
+
     return searchWorkspace(dirPath, options);
   });
 
