@@ -1,6 +1,6 @@
 {
   "name": "fortshell",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "Terminal-first multi AI CLI management IDE",
   "main": "dist-main/index.js",
   "scripts": {
