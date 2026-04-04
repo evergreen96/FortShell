@@ -4,6 +4,8 @@ A terminal-first protected workspace for running AI CLI coding agents (Claude Co
 
 Protect sensitive files from AI agents — they can see the files exist, but can't read or write them. Enforced by the macOS kernel, not by the app. No admin privileges required.
 
+Developer Preview: current macOS builds are unsigned and not notarized. First launch may require `xattr -cr` or **Open Anyway** in System Settings.
+
 ## Screenshots
 
 ### Explorer Workspace
@@ -97,6 +99,8 @@ npm run dev
 ### Option 2: Download (end users)
 
 Download from [GitHub Releases](https://github.com/evergreen96/FortShell/releases).
+
+Current release builds are developer previews and are not signed or notarized yet.
 
 ```bash
 # 1. Unzip and move to Applications
