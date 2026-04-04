@@ -797,6 +797,34 @@ describe("PolicyEngine", () => {
     expect(engine.listCompiledEntries()).toEqual([]);
   });
 
+  it("reports whether a workspace needs full inventory on open", async () => {
+    expect(engine.requiresWorkspaceInventoryForRoot(tmpDir)).toBe(false);
+
+    const policyPath = getWorkspacePolicyPath(tmpDir, policyStoreDir);
+    fs.mkdirSync(path.dirname(policyPath), { recursive: true });
+    fs.writeFileSync(
+      policyPath,
+      JSON.stringify({
+        version: 3,
+        workspaceRoot: fs.realpathSync(tmpDir),
+        rules: [
+          {
+            id: "rule-preset-env",
+            kind: "preset",
+            source: "preset",
+            presetId: "env-files",
+            createdAt: "2026-04-03T00:00:00.000Z",
+            updatedAt: "2026-04-03T00:00:00.000Z",
+          },
+        ],
+        updatedAt: "2026-04-03T00:00:00.000Z",
+      }),
+      "utf-8"
+    );
+
+    expect(engine.requiresWorkspaceInventoryForRoot(tmpDir)).toBe(true);
+  });
+
   it("restores the previous enforcer state when replacing rules fails mid-diff", async () => {
     await engine.setProjectRoot(tmpDir);
 

@@ -100,4 +100,29 @@ describe("WorkspaceIndexService", () => {
     expect(removed.removedEntries.map((entry) => entry.relativePath)).toEqual(["beta.txt"]);
     expect(service.search({ query: "beta", includeDirectories: true, limit: 10 })).toEqual([]);
   });
+
+  test("lists immediate children for root and nested directories from the warmed inventory", async () => {
+    const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), "fortshell-index-"));
+    tempDirs.push(rootDir);
+    await fs.mkdir(path.join(rootDir, "config", "private"), { recursive: true });
+    await fs.writeFile(path.join(rootDir, ".env"), "ok\n", "utf8");
+    await fs.writeFile(path.join(rootDir, "config", "app.json"), "{}\n", "utf8");
+    await fs.writeFile(
+      path.join(rootDir, "config", "private", "secrets.json"),
+      "{}\n",
+      "utf8"
+    );
+
+    const service = new WorkspaceIndexService();
+    await service.setRoot(rootDir);
+    await service.warm();
+
+    expect(service.listDirectory().map((entry) => entry.relativePath)).toEqual([
+      "config",
+      ".env",
+    ]);
+    expect(
+      service.listDirectory(path.join(rootDir, "config")).map((entry) => entry.relativePath)
+    ).toEqual(["config/private", "config/app.json"]);
+  });
 });

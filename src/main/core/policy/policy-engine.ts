@@ -17,6 +17,7 @@ import {
   type ProtectionWorkspacePolicy,
   type WorkspaceProtectionEntry,
   getProtectionPresetById,
+  getProtectionRuleSourceLabel,
 } from "./protection-rules";
 
 type PolicyEngineOptions = {
@@ -322,6 +323,48 @@ function isDirectManagedRule(rule: ProtectionRule): boolean {
   return rule.source === "manual" || rule.source === "directory";
 }
 
+function requiresWorkspaceInventory(rule: ProtectionRule): boolean {
+  return rule.kind === "extension" || rule.kind === "preset" || rule.kind === "directory";
+}
+
+function buildDirectCompiledEntries(
+  projectRoot: string,
+  rules: readonly ProtectionRule[]
+): CompiledProtectionEntry[] {
+  const compiledEntries: CompiledProtectionEntry[] = [];
+
+  for (const rule of rules) {
+    if (rule.kind !== "path") {
+      continue;
+    }
+
+    const targetPath = resolveRuleTargetPath(projectRoot, rule);
+    if (!targetPath || !fs.existsSync(targetPath)) {
+      continue;
+    }
+
+    const normalizedPath = resolveRealPath(targetPath);
+    const relativePath = path.relative(projectRoot, normalizedPath).replace(/\\/g, "/") || ".";
+    compiledEntries.push({
+      path: normalizedPath,
+      relativePath,
+      name: path.basename(normalizedPath),
+      ext: path.extname(normalizedPath),
+      isDirectory: false,
+      type: "file",
+      status: "shielded",
+      canRemoveDirectly: true,
+      sourceRuleId: rule.id,
+      sourceKind: rule.kind,
+      sourceLabel: getProtectionRuleSourceLabel(rule, BUILT_IN_PRESETS),
+    });
+  }
+
+  return compiledEntries.sort((left, right) =>
+    left.relativePath.localeCompare(right.relativePath)
+  );
+}
+
 export class PolicyEngine {
   private rules: ProtectionRule[] = [];
   private compiledEntries: CompiledProtectionEntry[] = [];
@@ -356,6 +399,27 @@ export class PolicyEngine {
     this.workspaceEntries = createWorkspaceEntriesMap(normalizedRoot, entries);
   }
 
+  setWorkspaceProtectionEntries(
+    rootPath: string,
+    entries: readonly WorkspaceProtectionEntry[]
+  ): void {
+    const normalizedRoot = resolveRealPath(rootPath);
+    this.workspaceEntriesRoot = normalizedRoot;
+    this.workspaceEntries = new Map(
+      entries.map((entry) => [entry.relativePath, { ...entry }])
+    );
+    if (!this.workspaceEntries.has(".")) {
+      const rootName = path.basename(normalizedRoot) || normalizedRoot;
+      this.workspaceEntries.set(".", {
+        path: normalizedRoot,
+        relativePath: ".",
+        name: rootName,
+        ext: "",
+        isDirectory: true,
+      });
+    }
+  }
+
   updateWorkspaceEntriesForDelta(
     rootPath: string,
     changedEntries: readonly WorkspaceSearchResult[],
@@ -380,6 +444,15 @@ export class PolicyEngine {
   clearWorkspaceEntries(): void {
     this.workspaceEntriesRoot = null;
     this.workspaceEntries = null;
+  }
+
+  requiresWorkspaceInventoryForRoot(rootPath: string): boolean {
+    const normalizedRoot = resolveRealPath(rootPath);
+    const rules =
+      this.projectRoot === normalizedRoot
+        ? this.rules
+        : loadWorkspacePolicy(normalizedRoot, this.policyStoreDir);
+    return rules.some(requiresWorkspaceInventory);
   }
 
   async addPathRule(filePath: string): Promise<{ changed: boolean; reason?: string }> {
@@ -671,8 +744,10 @@ export class PolicyEngine {
     }
 
     this.commitPolicySnapshot(nextSnapshot);
-    const nextContext = this.getEffectivePolicyContextForSnapshot(nextSnapshot);
-    if (previousContext !== null && previousContext !== nextContext) {
+    if (
+      previousContext !== null &&
+      previousContext !== this.getEffectivePolicyContextForSnapshot(nextSnapshot)
+    ) {
       this.bumpPolicyRevision();
     }
   }
@@ -862,16 +937,20 @@ export class PolicyEngine {
       try {
         if (options.compiledEntries) {
           compiledEntries.push(...options.compiledEntries.map((entry) => ({ ...entry })));
-        } else {
+        } else if (normalizedRules.some(requiresWorkspaceInventory)) {
           compiledEntries.push(
             ...compileProtectionRules({
               workspaceRoot: projectRoot,
               rules: normalizedRules,
               presetCatalog: BUILT_IN_PRESETS,
               workspaceEntries:
-                options.workspaceEntries ?? this.getCachedWorkspaceEntries(projectRoot) ?? buildWorkspaceEntries(projectRoot),
+                options.workspaceEntries ??
+                this.getCachedWorkspaceEntries(projectRoot) ??
+                buildWorkspaceEntries(projectRoot),
             })
           );
+        } else {
+          compiledEntries.push(...buildDirectCompiledEntries(projectRoot, normalizedRules));
         }
       } catch (err) {
         console.warn(`[policy] Failed to compile protection rules:`, err);

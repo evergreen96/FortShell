@@ -6,6 +6,7 @@ import {
   indexDirectory,
   expandDirectory,
   searchWorkspace,
+  type FileEntry,
   type WorkspaceSearchOptions,
 } from "../workspace/file-indexer";
 import { FileWatcher } from "../workspace/file-watcher";
@@ -47,6 +48,14 @@ function notifyPolicyMutationIfChanged(
   if (policyEngine.getPolicyRevision() !== previousRevision) {
     notifyPolicyMutation(ptyManager, policyEngine, previousRevision);
   }
+}
+
+function toFileEntries(entries: readonly { name: string; path: string; isDirectory: boolean }[]): FileEntry[] {
+  return entries.map((entry) => ({
+    name: entry.name,
+    path: entry.path,
+    isDirectory: entry.isDirectory,
+  }));
 }
 
 function notifySessionStateChanged(
@@ -192,6 +201,15 @@ export function registerIpcHandlers(
     if (result.canceled || result.filePaths.length === 0) return null;
     const dirPath = result.filePaths[0];
     const resolvedPath = fs.realpathSync(dirPath);
+    await workspaceIndexService.setRoot(resolvedPath);
+    const needsWorkspaceInventory = policyEngine.requiresWorkspaceInventoryForRoot(resolvedPath);
+    if (needsWorkspaceInventory) {
+      await workspaceIndexService.warm();
+      policyEngine.setWorkspaceProtectionEntries(
+        resolvedPath,
+        workspaceIndexService.getProtectionEntries()
+      );
+    }
     const previousRevision = policyEngine.getPolicyRevision();
     try {
       await policyEngine.setProjectRoot(resolvedPath);
@@ -200,12 +218,16 @@ export function registerIpcHandlers(
       notifyPolicyMutationIfChanged(ptyManager, policyEngine, previousRevision);
       throw err;
     }
-    await workspaceIndexService.setRoot(resolvedPath);
-    void workspaceIndexService.warm().then(() => {
-      if (workspaceIndexService.getRootPath() === resolvedPath) {
-        policyEngine.setWorkspaceEntries(resolvedPath, workspaceIndexService.getEntries());
-      }
-    });
+    if (!needsWorkspaceInventory) {
+      void workspaceIndexService.warm().then(() => {
+        if (workspaceIndexService.getRootPath() === resolvedPath) {
+          policyEngine.setWorkspaceProtectionEntries(
+            resolvedPath,
+            workspaceIndexService.getProtectionEntries()
+          );
+        }
+      });
+    }
     fileWatcher.watch(resolvedPath);
     addRecentWorkspace(resolvedPath);
     return resolvedPath;
@@ -213,6 +235,15 @@ export function registerIpcHandlers(
 
   safeHandle("workspace:set-root", async (_event, dirPath: string) => {
     const resolvedPath = fs.realpathSync(dirPath);
+    await workspaceIndexService.setRoot(resolvedPath);
+    const needsWorkspaceInventory = policyEngine.requiresWorkspaceInventoryForRoot(resolvedPath);
+    if (needsWorkspaceInventory) {
+      await workspaceIndexService.warm();
+      policyEngine.setWorkspaceProtectionEntries(
+        resolvedPath,
+        workspaceIndexService.getProtectionEntries()
+      );
+    }
     const previousRevision = policyEngine.getPolicyRevision();
     try {
       await policyEngine.setProjectRoot(resolvedPath);
@@ -221,12 +252,16 @@ export function registerIpcHandlers(
       notifyPolicyMutationIfChanged(ptyManager, policyEngine, previousRevision);
       throw err;
     }
-    await workspaceIndexService.setRoot(resolvedPath);
-    void workspaceIndexService.warm().then(() => {
-      if (workspaceIndexService.getRootPath() === resolvedPath) {
-        policyEngine.setWorkspaceEntries(resolvedPath, workspaceIndexService.getEntries());
-      }
-    });
+    if (!needsWorkspaceInventory) {
+      void workspaceIndexService.warm().then(() => {
+        if (workspaceIndexService.getRootPath() === resolvedPath) {
+          policyEngine.setWorkspaceProtectionEntries(
+            resolvedPath,
+            workspaceIndexService.getProtectionEntries()
+          );
+        }
+      });
+    }
     fileWatcher.watch(resolvedPath);
     addRecentWorkspace(resolvedPath);
     return resolvedPath;
@@ -237,10 +272,22 @@ export function registerIpcHandlers(
   });
 
   safeHandle("workspace:files", (_event, dirPath: string) => {
+    if (
+      workspaceIndexService.getState() === "ready" &&
+      workspaceIndexService.getRootPath() === fs.realpathSync(dirPath)
+    ) {
+      return toFileEntries(workspaceIndexService.listDirectory(dirPath));
+    }
     return indexDirectory(dirPath);
   });
 
   safeHandle("workspace:expand", (_event, dirPath: string, rootPath: string) => {
+    if (
+      workspaceIndexService.getState() === "ready" &&
+      workspaceIndexService.getRootPath() === fs.realpathSync(rootPath)
+    ) {
+      return toFileEntries(workspaceIndexService.listDirectory(dirPath));
+    }
     return expandDirectory(dirPath, rootPath);
   });
 

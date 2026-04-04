@@ -9,7 +9,11 @@ import {
 } from "./lib/large-repo-benchmark.mjs";
 
 const require = createRequire(import.meta.url);
-const { searchWorkspace } = require("../../dist-main/core/workspace/file-indexer.js");
+const {
+  searchWorkspace,
+  indexDirectory,
+  expandDirectory,
+} = require("../../dist-main/core/workspace/file-indexer.js");
 const { WorkspaceIndexService } = require("../../dist-main/core/workspace/workspace-index-service.js");
 const { PolicyEngine } = require("../../dist-main/core/policy/policy-engine.js");
 
@@ -68,7 +72,59 @@ async function createPolicyEngine(rootDir, suffix) {
   const policyStoreDir = path.join(os.tmpdir(), `fortshell-bench-policy-${suffix}`);
   const engine = new PolicyEngine({ policyStoreDir });
   await engine.setProjectRoot(rootDir);
-  return engine;
+  return { engine, policyStoreDir };
+}
+
+async function runOpenAndFileTreeBenchmarks(rootDir, sizeLabel) {
+  const indexService = new WorkspaceIndexService();
+  await indexService.setRoot(rootDir);
+  await indexService.warm();
+
+  const dynamic = await createPolicyEngine(rootDir, `${sizeLabel}-open-dynamic`);
+  await dynamic.engine.applyPreset("env-files");
+  await dynamic.engine.cleanup();
+
+  const openNoRules = await measure("open:workspace:no-rules", async () => {
+    const engine = new PolicyEngine({
+      policyStoreDir: path.join(os.tmpdir(), `fortshell-bench-policy-${sizeLabel}-open-no-rules`),
+    });
+    await engine.setProjectRoot(rootDir);
+    await engine.cleanup();
+    return true;
+  });
+
+  const openDynamic = await measure("open:workspace:env-files", async () => {
+    const engine = new PolicyEngine({ policyStoreDir: dynamic.policyStoreDir });
+    engine.setWorkspaceProtectionEntries(rootDir, indexService.getProtectionEntries());
+    await engine.setProjectRoot(rootDir);
+    await engine.cleanup();
+    return true;
+  });
+
+  const packagesDir = path.join(rootDir, "packages");
+  const rootFallback = await measure("filetree:root", async () => indexDirectory(rootDir));
+  const rootIndexed = await measure("filetree:root:indexed", async () =>
+    indexService.listDirectory(rootDir)
+  );
+  const expandFallback = await measure("filetree:expand:packages", async () =>
+    expandDirectory(packagesDir, rootDir)
+  );
+  const expandIndexed = await measure("filetree:expand:packages:indexed", async () =>
+    indexService.listDirectory(packagesDir)
+  );
+
+  return [
+    openNoRules,
+    openDynamic,
+    rootFallback,
+    rootIndexed,
+    expandFallback,
+    expandIndexed,
+  ].map((entry) => ({
+    label: entry.label,
+    durationMs: entry.durationMs,
+    count: Array.isArray(entry.result) ? entry.result.length : 1,
+  }));
 }
 
 async function runCompileBenchmarks(rootDir, sizeLabel) {
@@ -76,8 +132,11 @@ async function runCompileBenchmarks(rootDir, sizeLabel) {
   await workspaceIndexService.setRoot(rootDir);
   await workspaceIndexService.warm();
 
-  const extensionEngine = await createPolicyEngine(rootDir, `${sizeLabel}-extension`);
-  extensionEngine.setWorkspaceEntries(rootDir, workspaceIndexService.getEntries());
+  const { engine: extensionEngine } = await createPolicyEngine(rootDir, `${sizeLabel}-extension`);
+  extensionEngine.setWorkspaceProtectionEntries(
+    rootDir,
+    workspaceIndexService.getProtectionEntries()
+  );
   const extensionApply = await measure("compile:apply:extension:.env", async () => {
     await extensionEngine.addExtensionRule([".env"]);
     return extensionEngine.listCompiledEntries();
@@ -103,8 +162,11 @@ async function runCompileBenchmarks(rootDir, sizeLabel) {
   );
   await extensionEngine.cleanup();
 
-  const presetEngine = await createPolicyEngine(rootDir, `${sizeLabel}-preset`);
-  presetEngine.setWorkspaceEntries(rootDir, workspaceIndexService.getEntries());
+  const { engine: presetEngine } = await createPolicyEngine(rootDir, `${sizeLabel}-preset`);
+  presetEngine.setWorkspaceProtectionEntries(
+    rootDir,
+    workspaceIndexService.getProtectionEntries()
+  );
   const presetApply = await measure("compile:apply:preset:env-files", async () => {
     await presetEngine.applyPreset("env-files");
     return presetEngine.listCompiledEntries();
@@ -144,6 +206,7 @@ async function main() {
   const fixtureRun = await measure("fixture:generate", async () =>
     generateLargeWorkspace(rootDir, sizeLabel)
   );
+  const openAndTreeResults = await runOpenAndFileTreeBenchmarks(rootDir, sizeLabel);
   const searchResults = await runSearchBenchmarks(rootDir);
   const compileResults = await runCompileBenchmarks(rootDir, sizeLabel);
 
@@ -151,7 +214,7 @@ async function main() {
     sizeLabel,
     fileCount: fixtureRun.result.fileCount,
     fixtureGenerationMs: fixtureRun.durationMs,
-    searchResults,
+    searchResults: [...openAndTreeResults, ...searchResults],
     compileResults,
   });
 
