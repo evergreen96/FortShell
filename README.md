@@ -1,8 +1,20 @@
 # FortShell
 
-A terminal-first protected workspace for running AI CLI coding agents (Claude Code, Codex CLI, Gemini CLI, etc.) with **kernel-level file protection**.
+**Protect sensitive files from AI coding agents without giving them the keys to your secrets.**
 
-Protect sensitive files from AI agents — they can see the files exist, but can't read or write them. Enforced by the macOS kernel, not by the app. No admin privileges required.
+FortShell is a terminal-first workspace for running AI CLI agents (Claude Code, Codex CLI, Gemini CLI, etc.) with **OS-level file protection**.  
+AI agents can see your files exist, but protected files are unreadable and unwritable (`Operation not permitted`) unless explicitly trusted.
+
+![FortShell Demo](assets/demo.gif)
+
+### One-line Value
+Run your AI agents in sandboxed terminals, while protecting secrets from accidental read/write exposure.
+
+## Why FortShell
+
+- **AI-safe workspace**: Keep AI coding agents productive without exposing secrets like `.env`, credentials, or proprietary code.
+- **Immediate enforcement**: Protection is enforced by OS sandboxing (macOS first, Linux planned), not by a wrapper service.
+- **Workspace aware**: Protection rules are tied to each project and updated live as files change.
 
 Developer Preview: current macOS builds are unsigned and not notarized. First launch may require `xattr -cr` or **Open Anyway** in System Settings.
 
@@ -16,7 +28,7 @@ Developer Preview: current macOS builds are unsigned and not notarized. First la
 
 ![FortShell Protection Center](assets/protection-center.png)
 
-## Why?
+## Why FortShell still works
 
 When you use AI coding assistants in a terminal, they can read and modify any file in your project. FortShell lets you **set boundaries**:
 
